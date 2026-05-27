@@ -1,7 +1,7 @@
 import { IPTVChannel } from '../types/iptv';
 
-const DEVELOPMENT_API_BASE_URL = 'http://192.168.1.130:4000';
-const PRODUCTION_API_BASE_URL = 'https://api.tu-dominio.com';
+const DEVELOPMENT_API_BASE_URL = 'http://localhost:4000';
+const PRODUCTION_API_BASE_URL = 'http://localhost:4000';
 
 export const API_BASE_URL = __DEV__
   ? DEVELOPMENT_API_BASE_URL
