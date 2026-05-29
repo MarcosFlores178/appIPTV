@@ -609,8 +609,7 @@ const styles = StyleSheet.create({
   },
   splashContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#050505',
   },
   loaderMargin: {
     marginBottom: 20,
