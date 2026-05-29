@@ -73,7 +73,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               <>
                 <ActivityIndicator size="large" color="#ffffff" />
                 <Text style={styles.statusText}>
-                  {isBuffering ? 'Buffering del stream...' : 'Cargando stream...'}
+                  {isBuffering
+                    ? 'Buffering del stream...'
+                    : 'Cargando stream...'}
                 </Text>
               </>
             )}

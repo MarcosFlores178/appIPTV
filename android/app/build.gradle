@@ -116,6 +116,9 @@ android {
 }
 
 dependencies {
+
+    // Agregar soporte para imágenes WebP
+    // implementation("com.facebook.fresco:webpsupport")
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
