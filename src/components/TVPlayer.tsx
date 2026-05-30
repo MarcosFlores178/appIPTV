@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Video, { ResizeMode, type OnBufferData } from 'react-native-video';
 import { IPTVChannel } from '../types/iptv';
@@ -11,12 +11,39 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showChannelName, setShowChannelName] = useState(false);
+  const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
     setIsBuffering(false);
     setErrorMessage(null);
+    setShowChannelName(false);
+
+    if (channelNameTimerRef.current) {
+      clearTimeout(channelNameTimerRef.current);
+      channelNameTimerRef.current = null;
+    }
+
+    return () => {
+      if (channelNameTimerRef.current) {
+        clearTimeout(channelNameTimerRef.current);
+        channelNameTimerRef.current = null;
+      }
+    };
   }, [channel.id, channel.url]);
+
+  const showChannelNameBriefly = () => {
+    if (channelNameTimerRef.current) {
+      clearTimeout(channelNameTimerRef.current);
+    }
+
+    setShowChannelName(true);
+    channelNameTimerRef.current = setTimeout(() => {
+      setShowChannelName(false);
+      channelNameTimerRef.current = null;
+    }, 3000);
+  };
 
   const handleBuffer = ({ isBuffering: nextIsBuffering }: OnBufferData) => {
     setIsBuffering(nextIsBuffering);
@@ -49,6 +76,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           onLoad={() => {
             setIsLoading(false);
             setIsBuffering(false);
+            showChannelNameBriefly();
           }}
           onBuffer={handleBuffer}
           onError={event => {
@@ -79,6 +107,12 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
                 </Text>
               </>
             )}
+          </View>
+        )}
+
+        {showChannelName && !errorMessage && (
+          <View pointerEvents="none" style={styles.channelNameOverlay}>
+            <Text style={styles.channelNameText}>{channel.name}</Text>
           </View>
         )}
       </View>
@@ -112,6 +146,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
+  },
+
+  channelNameOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 42,
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+
+  channelNameText: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
   },
 
   statusText: {

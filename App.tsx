@@ -42,6 +42,8 @@ import {
 import { IPTVChannel } from './src/types/iptv';
 
 const CHANNEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const CHANNEL_LOAD_MAX_ATTEMPTS = 3;
+const CHANNEL_LOAD_RETRY_DELAY_MS = 1200;
 
 interface UpdateState {
   isChecking: boolean;
@@ -64,9 +66,13 @@ interface ChannelsLoadState {
 
 const MISSING_PLAYLIST_MESSAGE =
   'No hay playlist configurada. Contactá al administrador.';
+const LOADING_CHANNELS_MESSAGE = 'Cargando canales...';
 const TEMPORARY_CHANNELS_MESSAGE =
   'No se pudieron cargar los canales. Intentá nuevamente.';
 const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Ingresá nuevamente.';
+
+const wait = (milliseconds: number) =>
+  new Promise<void>(resolve => setTimeout(() => resolve(), milliseconds));
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -91,6 +97,7 @@ function App() {
     updateError: null,
   });
   const channelsUpdatedAtRef = useRef<string | null>(null);
+  const hasChannelsRef = useRef(false);
 
   const applyChannelsSnapshot = useCallback((snapshot: ChannelsResponse) => {
     if (channelsUpdatedAtRef.current === snapshot.updatedAt) {
@@ -98,6 +105,7 @@ function App() {
     }
 
     channelsUpdatedAtRef.current = snapshot.updatedAt;
+    hasChannelsRef.current = snapshot.channels.length > 0;
     setChannels(snapshot.channels);
     setActiveChannel(currentChannel => {
       if (!currentChannel) {
@@ -130,39 +138,60 @@ function App() {
   const loadChannelsForToken = useCallback(
     async (
       token: string,
-      options: { showLoading?: boolean } = {},
+      options: {
+        attempts?: number;
+        preserveReadyOnTemporaryError?: boolean;
+        showLoading?: boolean;
+      } = {},
     ): Promise<boolean> => {
+      const maxAttempts = options.attempts || CHANNEL_LOAD_MAX_ATTEMPTS;
+
       if (options.showLoading !== false) {
         setChannelsLoadState({ status: 'loading', message: null });
       }
 
-      try {
-        const nextChannelsSnapshot = await getChannelsSnapshot(token);
-        applyChannelsSnapshot(nextChannelsSnapshot);
-        setChannelsLoadState({ status: 'ready', message: null });
-        return true;
-      } catch (error) {
-        if (isSessionError(error)) {
-          await expireSession();
-          return false;
-        }
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const nextChannelsSnapshot = await getChannelsSnapshot(token);
+          applyChannelsSnapshot(nextChannelsSnapshot);
+          setChannelsLoadState({ status: 'ready', message: null });
+          return true;
+        } catch (error) {
+          if (isSessionError(error)) {
+            await expireSession();
+            return false;
+          }
 
-        if (isPlaylistMissingError(error)) {
-          setChannels([]);
-          setActiveChannel(null);
+          if (isPlaylistMissingError(error)) {
+            hasChannelsRef.current = false;
+            setChannels([]);
+            setActiveChannel(null);
+            setChannelsLoadState({
+              status: 'missing_playlist',
+              message: MISSING_PLAYLIST_MESSAGE,
+            });
+            return false;
+          }
+
+          if (attempt < maxAttempts) {
+            await wait(CHANNEL_LOAD_RETRY_DELAY_MS);
+            continue;
+          }
+
+          if (options.preserveReadyOnTemporaryError || hasChannelsRef.current) {
+            setChannelsLoadState({ status: 'ready', message: null });
+            return false;
+          }
+
           setChannelsLoadState({
-            status: 'missing_playlist',
-            message: MISSING_PLAYLIST_MESSAGE,
+            status: 'temporary_error',
+            message: TEMPORARY_CHANNELS_MESSAGE,
           });
           return false;
         }
-
-        setChannelsLoadState({
-          status: 'temporary_error',
-          message: TEMPORARY_CHANNELS_MESSAGE,
-        });
-        return false;
       }
+
+      return false;
     },
     [applyChannelsSnapshot, expireSession],
   );
@@ -371,6 +400,7 @@ function App() {
   useEffect(() => {
     if (!authSession) {
       channelsUpdatedAtRef.current = null;
+      hasChannelsRef.current = false;
       setChannels([]);
       setChannelsLoadState({ status: 'idle', message: null });
       return;
@@ -381,7 +411,11 @@ function App() {
     const refreshChannels = async () => {
       try {
         if (isMounted) {
-          await loadChannelsForToken(authSession.token, { showLoading: false });
+          await loadChannelsForToken(authSession.token, {
+            attempts: 1,
+            preserveReadyOnTemporaryError: true,
+            showLoading: false,
+          });
         }
       } catch (error) {
         if (
@@ -535,7 +569,11 @@ function App() {
               channelsLoadState.status === 'loading' ? (
               <ChannelsUnavailableScreen
                 isLoading={channelsLoadState.status === 'loading'}
-                message={channelsLoadState.message || TEMPORARY_CHANNELS_MESSAGE}
+                message={
+                  channelsLoadState.status === 'loading'
+                    ? LOADING_CHANNELS_MESSAGE
+                    : channelsLoadState.message || TEMPORARY_CHANNELS_MESSAGE
+                }
                 onRetry={handleRetryChannels}
               />
             ) : activeChannel ? (
@@ -575,7 +613,9 @@ function ChannelsUnavailableScreen({
 }) {
   return (
     <View style={styles.channelsUnavailableContainer}>
-      <Text style={styles.channelsUnavailableTitle}>Canales no disponibles</Text>
+      <Text style={styles.channelsUnavailableTitle}>
+        {isLoading ? 'Cargando canales' : 'Canales no disponibles'}
+      </Text>
       <Text style={styles.channelsUnavailableMessage}>{message}</Text>
       <Pressable
         onPress={() => onRetry().catch(() => undefined)}

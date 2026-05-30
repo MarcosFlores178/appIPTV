@@ -57,10 +57,10 @@ export default function ChannelCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: 126,
+    width: 136,
     minWidth: 110,
-    maxWidth: 132,
-    height: 134,
+    maxWidth: 140,
+    height: 144,
     marginVertical: 6,
     marginHorizontal: 8,
     borderRadius: 14,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
 
   logo: {
     width: '90%',
-    height: 50,
+    height: 75,
   },
 
   logoPlaceholder: {
