@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  BackHandler,
   Image,
+  Modal,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -30,6 +33,7 @@ interface HomeScreenProps {
   onSelectCategory: (category: string) => void;
   onSelectSortMode: (sortMode: ChannelSortMode) => void;
   onOpenChannel: (channel: IPTVChannel) => void;
+  onRequestExit: (shouldLogout: boolean) => Promise<void>;
 }
 
 const appLogo = require('../../assets/branding/app-logo.png');
@@ -41,11 +45,15 @@ export default function HomeScreen({
   onSelectCategory,
   onSelectSortMode,
   onOpenChannel,
+  onRequestExit,
 }: HomeScreenProps) {
   const [selectedChannel, setSelectedChannel] = useState<string>(
     allChannels[0]?.id ?? '',
   );
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [isExitDialogVisible, setIsExitDialogVisible] = useState(false);
+  const [shouldLogoutOnExit, setShouldLogoutOnExit] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const isCategorySortEnabled = selectedCategory === 'Todos';
   const [currentTime, setCurrentTime] = useState(() =>
@@ -96,6 +104,26 @@ export default function HomeScreen({
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (isExitDialogVisible) {
+        setIsExitDialogVisible(false);
+        return true;
+      }
+
+      setShouldLogoutOnExit(false);
+      setIsExitDialogVisible(true);
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackPress,
+    );
+
+    return () => subscription.remove();
+  }, [isExitDialogVisible]);
+
   const categories = useMemo(() => {
     const baseCategories = getChannelCategories(allChannels);
 
@@ -130,6 +158,23 @@ export default function HomeScreen({
     setSelectedChannel(channel.id);
     saveLastChannelId(channel.id).catch(() => undefined);
     onOpenChannel(channel);
+  };
+
+  const handleCancelExit = () => {
+    if (isExiting) {
+      return;
+    }
+
+    setIsExitDialogVisible(false);
+  };
+
+  const handleConfirmExit = async () => {
+    if (isExiting) {
+      return;
+    }
+
+    setIsExiting(true);
+    await onRequestExit(shouldLogoutOnExit);
   };
 
   return (
@@ -267,6 +312,74 @@ export default function HomeScreen({
         emptyMessage={emptyMessage}
         groupByCategory={sortMode === 'group'}
       />
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isExitDialogVisible}
+        onRequestClose={handleCancelExit}
+      >
+        <View style={styles.exitDialogBackdrop}>
+          <View style={styles.exitDialog}>
+            <Text style={styles.exitDialogTitle}>
+              ¿Quiere salir de la aplicación?
+            </Text>
+
+            <Pressable
+              onPress={() => setShouldLogoutOnExit(value => !value)}
+              disabled={isExiting}
+              style={({ focused, pressed }) => [
+                styles.logoutSwitchRow,
+                focused && styles.dialogControlFocused,
+                pressed && styles.dialogControlPressed,
+                isExiting && styles.dialogControlDisabled,
+              ]}
+            >
+              <Switch
+                value={shouldLogoutOnExit}
+                onValueChange={setShouldLogoutOnExit}
+                disabled={isExiting}
+                thumbColor={shouldLogoutOnExit ? '#ffffff' : '#d8d8d8'}
+                trackColor={{ false: '#555', true: '#ff7a1a' }}
+              />
+              <Text style={styles.logoutSwitchText}>Cerrar sesión</Text>
+            </Pressable>
+
+            <View style={styles.exitDialogActions}>
+              <Pressable
+                onPress={handleConfirmExit}
+                disabled={isExiting}
+                style={({ focused, pressed }) => [
+                  styles.exitDialogButton,
+                  styles.exitButton,
+                  focused && styles.dialogControlFocused,
+                  pressed && styles.dialogControlPressed,
+                  isExiting && styles.dialogControlDisabled,
+                ]}
+              >
+                <Text style={styles.exitDialogButtonText}>
+                  {isExiting ? 'Saliendo...' : 'Salir'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleCancelExit}
+                disabled={isExiting}
+                hasTVPreferredFocus
+                style={({ focused, pressed }) => [
+                  styles.exitDialogButton,
+                  styles.cancelButton,
+                  focused && styles.dialogControlFocused,
+                  pressed && styles.dialogControlPressed,
+                  isExiting && styles.dialogControlDisabled,
+                ]}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -459,5 +572,100 @@ const styles = StyleSheet.create({
 
   sortButtonTextDisabled: {
     color: '#777',
+  },
+
+  exitDialogBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+
+  exitDialog: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 8,
+    backgroundColor: '#181818',
+    borderWidth: 1,
+    borderColor: '#3a3a3a',
+    padding: 28,
+  },
+
+  exitDialogTitle: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+
+  logoutSwitchRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    marginTop: 26,
+    paddingHorizontal: 14,
+  },
+
+  logoutSwitchText: {
+    color: '#f2f2f2',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+
+  exitDialogActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 14,
+    marginTop: 30,
+  },
+
+  exitDialogButton: {
+    minWidth: 136,
+    minHeight: 52,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+
+  exitButton: {
+    backgroundColor: '#2b2b2b',
+    borderColor: '#4a4a4a',
+  },
+
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+    borderColor: '#f0f0f0',
+  },
+
+  exitDialogButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+
+  cancelButtonText: {
+    color: '#111',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+
+  dialogControlFocused: {
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.04 }],
+  },
+
+  dialogControlPressed: {
+    opacity: 0.86,
+  },
+
+  dialogControlDisabled: {
+    opacity: 0.55,
   },
 });

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
+  BackHandler,
   Platform,
   StatusBar,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   getChannelsSnapshot,
   getCurrentSession,
   login,
+  logout,
 } from './src/services/api';
 import {
   checkForAppUpdate,
@@ -32,6 +34,7 @@ import {
 import { ChannelSortMode } from './src/services/channelService';
 import {
   clearAuthSession,
+  clearLocalSessionData,
   getAuthSession,
   getFavoriteChannelIds,
   getOrCreateDeviceId,
@@ -510,6 +513,29 @@ function App() {
     await loadChannelsForToken(authSession.token);
   };
 
+  const handleRequestExit = useCallback(
+    async (shouldLogout: boolean) => {
+      if (shouldLogout) {
+        const token = authSession?.token;
+
+        if (token) {
+          await logout(token);
+        }
+
+        await clearLocalSessionData();
+        setAuthSession(null);
+        setActiveChannel(null);
+        setChannels([]);
+        setFavoriteIds([]);
+        channelsUpdatedAtRef.current = null;
+        hasChannelsRef.current = false;
+      }
+
+      BackHandler.exitApp();
+    },
+    [authSession?.token],
+  );
+
   if (updateState.isForceUpdateRequired) {
     return (
       <SafeAreaProvider>
@@ -593,6 +619,7 @@ function App() {
                 onSelectCategory={setHomeSelectedCategory}
                 onSelectSortMode={setHomeSortMode}
                 onOpenChannel={setActiveChannel}
+                onRequestExit={handleRequestExit}
               />
             )}
           </>
