@@ -26,6 +26,12 @@ import {
   logout,
 } from './src/services/api';
 import {
+  BackendConfigError,
+  DEFAULT_BACKEND_SERVER_INPUT,
+  getBackendServerInput,
+  saveBackendServerInput,
+} from './src/services/backendConfig';
+import {
   checkForAppUpdate,
   downloadAndInstallApk,
   fetchAppVersion,
@@ -92,6 +98,9 @@ function App() {
   const [homeSelectedCategory, setHomeSelectedCategory] = useState('Todos');
   const [homeSortMode, setHomeSortMode] = useState<ChannelSortMode>('name');
   const [authSession, setAuthSession] = useState<StoredAuthSession | null>(null);
+  const [backendServerInput, setBackendServerInput] = useState(
+    DEFAULT_BACKEND_SERVER_INPUT,
+  );
   const [channels, setChannels] = useState<IPTVChannel[]>([]);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
@@ -247,11 +256,14 @@ function App() {
       }
 
       // PASO 2: Luego hidratar datos de autenticación
-      const [storedAuthSession, favorites] = await Promise.all([
-        getAuthSession(),
-        getFavoriteChannelIds(),
-      ]);
+      const [storedAuthSession, favorites, storedBackendServerInput] =
+        await Promise.all([
+          getAuthSession(),
+          getFavoriteChannelIds(),
+          getBackendServerInput(),
+        ]);
 
+      setBackendServerInput(storedBackendServerInput);
       setFavoriteIds(favorites);
 
       if (!storedAuthSession) {
@@ -535,6 +547,10 @@ function App() {
   };
 
   const getLoginErrorMessage = (error: unknown) => {
+    if (error instanceof BackendConfigError) {
+      return error.message;
+    }
+
     if (error instanceof ApiError) {
       if (error.code === 'INVALID_CREDENTIALS') {
         return 'Usuario o contraseña incorrectos.';
@@ -554,11 +570,18 @@ function App() {
     return 'No se pudo conectar con el servidor.';
   };
 
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (
+    username: string,
+    password: string,
+    server: string,
+  ) => {
     setIsLoginLoading(true);
     setLoginError(null);
 
     try {
+      await saveBackendServerInput(server);
+      setBackendServerInput(server.trim());
+
       const deviceId = await getOrCreateDeviceId();
       const response = await login({
         username,
@@ -665,6 +688,7 @@ function App() {
           <>
             {!authSession ? (
               <LoginScreen
+                initialServer={backendServerInput}
                 errorMessage={loginError}
                 isLoading={isLoginLoading}
                 onLogin={handleLogin}

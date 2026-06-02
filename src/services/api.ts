@@ -1,11 +1,5 @@
 import { IPTVChannel } from '../types/iptv';
-
-const DEVELOPMENT_API_BASE_URL = 'http://192.168.18.13:4000';
-const PRODUCTION_API_BASE_URL = 'http://192.168.18.13:4000';
-
-export const API_BASE_URL = __DEV__
-  ? DEVELOPMENT_API_BASE_URL
-  : PRODUCTION_API_BASE_URL;
+import { getBackendBaseUrl } from './backendConfig';
 
 interface LoginResponse {
   token: string;
@@ -40,7 +34,8 @@ export class ApiError extends Error {
   }
 }
 
-const getApiUrl = (path: string) => `${API_BASE_URL}${path}`;
+export const getApiUrl = async (path: string): Promise<string> =>
+  `${await getBackendBaseUrl()}${path}`;
 
 const parseJsonResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({}));
@@ -74,7 +69,7 @@ export const login = async ({
   deviceId: string;
   deviceName: string;
 }): Promise<LoginResponse> => {
-  const response = await fetch(getApiUrl('/auth/login'), {
+  const response = await fetch(await getApiUrl('/auth/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -91,7 +86,7 @@ export const login = async ({
 };
 
 export const getCurrentSession = async (token: string): Promise<void> => {
-  const response = await fetch(getApiUrl('/auth/me'), {
+  const response = await fetch(await getApiUrl('/auth/me'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -101,7 +96,7 @@ export const getCurrentSession = async (token: string): Promise<void> => {
 };
 
 export const logout = async (token: string): Promise<void> => {
-  await fetch(getApiUrl('/auth/logout'), {
+  await fetch(await getApiUrl('/auth/logout'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -110,7 +105,7 @@ export const logout = async (token: string): Promise<void> => {
 };
 
 export const getChannelsSnapshot = async (token: string): Promise<ChannelsResponse> => {
-  const response = await fetch(getApiUrl('/channels'), {
+  const response = await fetch(await getApiUrl('/channels'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },

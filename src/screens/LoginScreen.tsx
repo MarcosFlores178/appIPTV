@@ -12,16 +12,19 @@ import {
 const appLogo = require('../../assets/branding/app-logo.png');
 
 interface LoginScreenProps {
+  initialServer: string;
   errorMessage?: string | null;
   isLoading: boolean;
-  onLogin: (username: string, password: string) => Promise<void>;
+  onLogin: (username: string, password: string, server: string) => Promise<void>;
 }
 
 export default function LoginScreen({
+  initialServer,
   errorMessage,
   isLoading,
   onLogin,
 }: LoginScreenProps) {
+  const [server, setServer] = useState(initialServer);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -30,7 +33,7 @@ export default function LoginScreen({
       return;
     }
 
-    onLogin(username.trim(), password).catch(() => undefined);
+    onLogin(username.trim(), password, server).catch(() => undefined);
   };
 
   return (
@@ -41,6 +44,18 @@ export default function LoginScreen({
         <Text style={styles.copy}>Usa tu usuario para habilitar este TV.</Text>
 
         <View style={styles.form}>
+          <TextInput
+            value={server}
+            onChangeText={setServer}
+            placeholder="Servidor backend"
+            placeholderTextColor="#777"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+            keyboardType="url"
+            style={styles.input}
+          />
+
           <TextInput
             value={username}
             onChangeText={setUsername}
@@ -70,7 +85,9 @@ export default function LoginScreen({
 
           <Pressable
             onPress={handleSubmit}
-            disabled={isLoading || !username.trim() || !password}
+            disabled={
+              isLoading || !server.trim() || !username.trim() || !password
+            }
             hasTVPreferredFocus
             style={({ pressed, focused }) => [
               styles.loginButton,
