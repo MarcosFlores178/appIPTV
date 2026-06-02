@@ -55,6 +55,10 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
         <Video
           source={{
             uri: channel.url,
+            // 🔽 AQUÍ AÑADIMOS EL USER AGENT AMIGABLE 🔽
+            headers: {
+              'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            },
             bufferConfig: {
               minBufferMs: 15000,
               maxBufferMs: 50000,

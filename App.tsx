@@ -47,6 +47,7 @@ import { IPTVChannel } from './src/types/iptv';
 const CHANNEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const CHANNEL_LOAD_MAX_ATTEMPTS = 3;
 const CHANNEL_LOAD_RETRY_DELAY_MS = 1200;
+const SESSION_STATUS_POLL_INTERVAL_MS = 10 * 1000;
 
 interface UpdateState {
   isChecking: boolean;
@@ -73,9 +74,15 @@ const LOADING_CHANNELS_MESSAGE = 'Cargando canales...';
 const TEMPORARY_CHANNELS_MESSAGE =
   'No se pudieron cargar los canales. Intentá nuevamente.';
 const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Ingresá nuevamente.';
+const ADMIN_CLOSED_SESSION_MESSAGE = 'Sesión cerrada por el administrador';
+const ADMIN_CANCELED_ACCOUNT_MESSAGE =
+  'Cuenta cancelada por al administrador. Motivo:';
 
 const wait = (milliseconds: number) =>
   new Promise<void>(resolve => setTimeout(() => resolve(), milliseconds));
+
+const getCanceledAccountMessage = (reason: string) =>
+  `${ADMIN_CANCELED_ACCOUNT_MESSAGE} ${reason.trim() || 'Sin motivo especificado'}`;
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -130,12 +137,41 @@ function App() {
     error.status === 404 &&
     error.code === 'PLAYLIST_NOT_FOUND';
 
+  const isCanceledAccountError = (error: unknown) =>
+    error instanceof ApiError &&
+    error.status === 403 &&
+    error.code === 'SERVICE_CANCELED';
+
   const expireSession = useCallback(async () => {
     await clearAuthSession();
     setAuthSession(null);
     setActiveChannel(null);
     setChannelsLoadState({ status: 'idle', message: null });
     setLoginError(EXPIRED_SESSION_MESSAGE);
+  }, []);
+
+  const closeSessionFromAdmin = useCallback(async () => {
+    await clearAuthSession();
+    setAuthSession(null);
+    setActiveChannel(null);
+    setChannels([]);
+    setFavoriteIds([]);
+    channelsUpdatedAtRef.current = null;
+    hasChannelsRef.current = false;
+    setChannelsLoadState({ status: 'idle', message: null });
+    setLoginError(ADMIN_CLOSED_SESSION_MESSAGE);
+  }, []);
+
+  const closeCanceledAccountFromAdmin = useCallback(async (reason: string) => {
+    await clearAuthSession();
+    setAuthSession(null);
+    setActiveChannel(null);
+    setChannels([]);
+    setFavoriteIds([]);
+    channelsUpdatedAtRef.current = null;
+    hasChannelsRef.current = false;
+    setChannelsLoadState({ status: 'idle', message: null });
+    setLoginError(getCanceledAccountMessage(reason));
   }, []);
 
   const loadChannelsForToken = useCallback(
@@ -454,6 +490,45 @@ function App() {
     };
   }, [authSession, loadChannelsForToken]);
 
+  useEffect(() => {
+    if (!authSession) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const checkSessionStatus = async () => {
+      try {
+        await getCurrentSession(authSession.token);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (isCanceledAccountError(error)) {
+          await closeCanceledAccountFromAdmin(
+            error instanceof ApiError ? error.canceledReason || '' : '',
+          );
+          return;
+        }
+
+        if (isSessionError(error)) {
+          await closeSessionFromAdmin();
+        }
+      }
+    };
+
+    const sessionStatusInterval = setInterval(
+      checkSessionStatus,
+      SESSION_STATUS_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      isMounted = false;
+      clearInterval(sessionStatusInterval);
+    };
+  }, [authSession, closeCanceledAccountFromAdmin, closeSessionFromAdmin]);
+
   const handleToggleFavorite = async (channel: IPTVChannel) => {
     const nextFavorites = await toggleFavoriteChannelId(channel.id);
     setFavoriteIds(nextFavorites);
@@ -467,6 +542,10 @@ function App() {
 
       if (error.code === 'DEVICE_LIMIT_REACHED') {
         return 'Este usuario ya está activo en otro dispositivo.';
+      }
+
+      if (error.code === 'SERVICE_CANCELED') {
+        return getCanceledAccountMessage(error.canceledReason || '');
       }
 
       return error.message;

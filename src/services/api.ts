@@ -24,12 +24,19 @@ export interface ChannelsResponse {
 export class ApiError extends Error {
   status: number;
   code?: string;
+  canceledReason?: string;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    canceledReason?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.canceledReason = canceledReason;
   }
 }
 
@@ -45,8 +52,12 @@ const parseJsonResponse = async <T>(response: Response): Promise<T> => {
       typeof payload?.message === 'string'
         ? payload.message
         : 'No se pudo completar la solicitud.';
+    const canceledReason =
+      typeof payload?.canceledReason === 'string'
+        ? payload.canceledReason
+        : undefined;
 
-    throw new ApiError(message, response.status, errorCode);
+    throw new ApiError(message, response.status, errorCode, canceledReason);
   }
 
   return payload as T;

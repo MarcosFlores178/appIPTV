@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "564632320824",
+    "project_id": "appiptv-90257",
+    "storage_bucket": "appiptv-90257.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:564632320824:android:c0cf9699e6f19b71c8dfcd",
+        "android_client_info": {
+          "package_name": "com.appiptv"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBiPfQQgykkJw1uIiEGbyc9dducra3TGy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

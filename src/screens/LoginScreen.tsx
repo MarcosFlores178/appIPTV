@@ -36,7 +36,7 @@ export default function LoginScreen({
   return (
     <View style={styles.container}>
       <View style={styles.panel}>
-        <Image source={appLogo} resizeMode="contain" style={styles.logo} />
+        <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.logo} />
         <Text style={styles.title}>Ingresar</Text>
         <Text style={styles.copy}>Usa tu usuario para habilitar este TV.</Text>
 

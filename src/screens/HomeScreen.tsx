@@ -181,7 +181,7 @@ export default function HomeScreen({
     <View style={styles.container}>
       <View style={styles.hero}>
         <View style={styles.brandRow}>
-          <Image source={appLogo} resizeMode="contain" style={styles.brandLogo} />
+          <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.brandLogo} />
           <Text style={styles.clock}>{currentTime}</Text>
         </View>
         {/* <Text style={styles.subtitle}>
