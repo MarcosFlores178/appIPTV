@@ -1,9 +1,14 @@
-import React, { useMemo } from 'react';
-import { FlatList, View, StyleSheet, Text } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { FlatList, View, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import ChannelCard from './ChannelCard';
 import { IPTVChannel } from '../types/iptv';
 
-const GRID_COLUMNS = 6;
+const CARD_WIDTH = 136;
+const CARD_MARGIN = 16; // Margen horizontal total (left + right)
+const GRID_PADDING = 48; // Padding horizontal del container (24 * 2)
+const MIN_COLUMNS = 3;
+const MAX_COLUMNS = 8;
+
 // 1. Definí las alturas estimadas afuera del componente (ajustalas a tu diseño real si es necesario)
 const ALTURA_HEADER = 60; // Lo que mide el contenedor de la categoría
 const ALTURA_ROW = 160;   // Lo que mide la fila con las tarjetas de canales + sus márgenes
@@ -27,17 +32,23 @@ type GridItem =
       channels: IPTVChannel[];
     };
 
-const chunkChannels = (channels: IPTVChannel[]): IPTVChannel[][] => {
+const calculateGridColumns = (screenWidth: number): number => {
+  const availableWidth = screenWidth - GRID_PADDING;
+  const columns = Math.floor(availableWidth / (CARD_WIDTH + CARD_MARGIN));
+  return Math.max(MIN_COLUMNS, Math.min(columns, MAX_COLUMNS));
+};
+
+const chunkChannels = (channels: IPTVChannel[], columnsCount: number): IPTVChannel[][] => {
   const rows: IPTVChannel[][] = [];
 
-  for (let index = 0; index < channels.length; index += GRID_COLUMNS) {
-    rows.push(channels.slice(index, index + GRID_COLUMNS));
+  for (let index = 0; index < channels.length; index += columnsCount) {
+    rows.push(channels.slice(index, index + columnsCount));
   }
 
   return rows;
 };
 
-const buildGroupedGridItems = (channels: IPTVChannel[]): GridItem[] => {
+const buildGroupedGridItems = (channels: IPTVChannel[], columnsCount: number): GridItem[] => {
   const groups = new Map<string, IPTVChannel[]>();
 
   for (const channel of channels) {
@@ -54,7 +65,7 @@ const buildGroupedGridItems = (channels: IPTVChannel[]): GridItem[] => {
       id: `header-${groupName}`,
       title: groupName,
     },
-    ...chunkChannels(groupChannels).map((rowChannels, rowIndex) => ({
+    ...chunkChannels(groupChannels, columnsCount).map((rowChannels, rowIndex) => ({
       type: 'row' as const,
       id: `row-${groupName}-${rowIndex}`,
       channels: rowChannels,
@@ -62,8 +73,8 @@ const buildGroupedGridItems = (channels: IPTVChannel[]): GridItem[] => {
   ]);
 };
 
-const buildFlatGridItems = (channels: IPTVChannel[]): GridItem[] =>
-  chunkChannels(channels).map((rowChannels, rowIndex) => ({
+const buildFlatGridItems = (channels: IPTVChannel[], columnsCount: number): GridItem[] =>
+  chunkChannels(channels, columnsCount).map((rowChannels, rowIndex) => ({
     type: 'row',
     id: `row-${rowIndex}`,
     channels: rowChannels,
@@ -76,12 +87,15 @@ export default function ChannelGrid({
   emptyMessage,
   groupByCategory = false,
 }: ChannelGridProps) {
+  const { width: screenWidth } = useWindowDimensions();
+  const columnsCount = useMemo(() => calculateGridColumns(screenWidth), [screenWidth]);
+
   const gridItems = useMemo(
     () =>
       groupByCategory
-        ? buildGroupedGridItems(channels)
-        : buildFlatGridItems(channels),
-    [channels, groupByCategory],
+        ? buildGroupedGridItems(channels, columnsCount)
+        : buildFlatGridItems(channels, columnsCount),
+    [channels, groupByCategory, columnsCount],
   );
 
   if (channels.length === 0) {
@@ -168,7 +182,9 @@ const styles = StyleSheet.create({
 
   row: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    width: '100%',
   },
 
   categoryHeader: {

@@ -12,13 +12,17 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [isBuffering, setIsBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showChannelName, setShowChannelName] = useState(false);
+  const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
   const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasBufferingRef = useRef(false);
 
   useEffect(() => {
     setIsLoading(true);
     setIsBuffering(false);
     setErrorMessage(null);
     setShowChannelName(false);
+    setHasPlaybackStarted(false);
+    wasBufferingRef.current = false;
 
     if (channelNameTimerRef.current) {
       clearTimeout(channelNameTimerRef.current);
@@ -33,17 +37,27 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     };
   }, [channel.id, channel.url]);
 
-  const showChannelNameBriefly = () => {
-    if (channelNameTimerRef.current) {
-      clearTimeout(channelNameTimerRef.current);
+  // Mostrar el nombre cuando el buffering se complete después de haber empezado
+  useEffect(() => {
+    if (hasPlaybackStarted && !isBuffering && wasBufferingRef.current) {
+      // El video pasó de buffering a reproduciendo normalmente
+      if (channelNameTimerRef.current) {
+        clearTimeout(channelNameTimerRef.current);
+      }
+
+      setShowChannelName(true);
+      channelNameTimerRef.current = setTimeout(() => {
+        setShowChannelName(false);
+        channelNameTimerRef.current = null;
+      }, 3000);
+
+      wasBufferingRef.current = false;
     }
 
-    setShowChannelName(true);
-    channelNameTimerRef.current = setTimeout(() => {
-      setShowChannelName(false);
-      channelNameTimerRef.current = null;
-    }, 3000);
-  };
+    if (isBuffering) {
+      wasBufferingRef.current = true;
+    }
+  }, [isBuffering, hasPlaybackStarted]);
 
   const handleBuffer = ({ isBuffering: nextIsBuffering }: OnBufferData) => {
     setIsBuffering(nextIsBuffering);
@@ -79,8 +93,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           }}
           onLoad={() => {
             setIsLoading(false);
-            setIsBuffering(false);
-            showChannelNameBriefly();
+            setHasPlaybackStarted(true);
           }}
           onBuffer={handleBuffer}
           onError={event => {

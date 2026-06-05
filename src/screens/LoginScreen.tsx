@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -27,6 +28,21 @@ export default function LoginScreen({
   const [server, setServer] = useState(initialServer);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isServerEditableMode, setIsServerEditableMode] = useState(false);
+  
+  const serverRef = useRef<TextInput>(null);
+  const usernameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const loginButtonRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Al montar, enfocar en el campo usuario (o servidor si está en modo edición)
+    if (isServerEditableMode) {
+      serverRef.current?.focus();
+    } else {
+      usernameRef.current?.focus();
+    }
+  }, [isServerEditableMode]);
 
   const handleSubmit = () => {
     if (isLoading) {
@@ -44,19 +60,34 @@ export default function LoginScreen({
         <Text style={styles.copy}>Usa tu usuario para habilitar este TV.</Text>
 
         <View style={styles.form}>
+          <View style={styles.serverToggleRow}>
+            <Switch
+              value={isServerEditableMode}
+              onValueChange={setIsServerEditableMode}
+              thumbColor={isServerEditableMode ? '#ffffff' : '#d8d8d8'}
+              trackColor={{ false: '#555', true: '#ff7a1a' }}
+              disabled={isLoading}
+            />
+            <Text style={styles.serverToggleLabel}>Seleccionar servidor</Text>
+          </View>
+
           <TextInput
+            ref={serverRef}
             value={server}
             onChangeText={setServer}
             placeholder="Servidor backend"
             placeholderTextColor="#777"
             autoCapitalize="none"
             autoCorrect={false}
-            editable={!isLoading}
+            editable={!isLoading && isServerEditableMode}
             keyboardType="url"
-            style={styles.input}
+            onSubmitEditing={() => usernameRef.current?.focus()}
+            returnKeyType="next"
+            style={[styles.input, !isServerEditableMode && styles.inputDisabled]}
           />
 
           <TextInput
+            ref={usernameRef}
             value={username}
             onChangeText={setUsername}
             placeholder="Usuario"
@@ -64,10 +95,13 @@ export default function LoginScreen({
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isLoading}
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            returnKeyType="next"
             style={styles.input}
           />
 
           <TextInput
+            ref={passwordRef}
             value={password}
             onChangeText={setPassword}
             placeholder="Contraseña"
@@ -76,6 +110,8 @@ export default function LoginScreen({
             autoCorrect={false}
             editable={!isLoading}
             secureTextEntry
+            onSubmitEditing={() => loginButtonRef.current?.focus()}
+            returnKeyType="done"
             style={styles.input}
           />
 
@@ -84,11 +120,11 @@ export default function LoginScreen({
           ) : null}
 
           <Pressable
+            ref={loginButtonRef}
             onPress={handleSubmit}
             disabled={
               isLoading || !server.trim() || !username.trim() || !password
             }
-            hasTVPreferredFocus
             style={({ pressed, focused }) => [
               styles.loginButton,
               focused && styles.loginButtonFocused,
@@ -150,6 +186,20 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
 
+  serverToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+
+  serverToggleLabel: {
+    color: '#bdbdbd',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
   input: {
     minHeight: 56,
     borderRadius: 8,
@@ -159,6 +209,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     paddingHorizontal: 16,
+  },
+
+  inputDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#0f0f0f',
+    borderColor: '#222',
   },
 
   errorText: {
