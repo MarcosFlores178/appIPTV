@@ -5,3 +5,14 @@ export interface IPTVChannel {
   group: string;
   url: string;
 }
+
+export interface DeviceSession {
+  id: string;
+  manufacturer: string;
+  model: string;
+  lastSeenAt: string;
+}
+
+export interface LoginErrorWithSessions {
+  activeSessions: DeviceSession[];
+}

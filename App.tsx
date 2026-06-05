@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppSplashScreen from './src/components/AppSplashScreen';
+import SessionLimitModal from './src/components/SessionLimitModal';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import PlayerScreen from './src/screens/PlayerScreen';
@@ -24,6 +25,7 @@ import {
   getCurrentSession,
   login,
   logout,
+  revokeSession,
 } from './src/services/api';
 import {
   BackendConfigError,
@@ -38,6 +40,7 @@ import {
   getCurrentAppVersionCode,
 } from './src/services/UpdateService';
 import { ChannelSortMode } from './src/services/channelService';
+import { getDeviceInfo } from './src/services/deviceInfo';
 import {
   clearAuthSession,
   clearLocalSessionData,
@@ -48,7 +51,7 @@ import {
   toggleFavoriteChannelId,
   StoredAuthSession,
 } from './src/services/storage';
-import { IPTVChannel } from './src/types/iptv';
+import { DeviceSession, IPTVChannel } from './src/types/iptv';
 
 const CHANNEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const CHANNEL_LOAD_MAX_ATTEMPTS = 3;
@@ -115,6 +118,14 @@ function App() {
     isOptionalUpdateAvailable: false,
     updateError: null,
   });
+  const [sessionLimitModalVisible, setSessionLimitModalVisible] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<DeviceSession[]>([]);
+  const [pendingLoginCredentials, setPendingLoginCredentials] = useState<{
+    username: string;
+    password: string;
+    server: string;
+  } | null>(null);
+  const [isSessionRevoking, setIsSessionRevoking] = useState(false);
   const channelsUpdatedAtRef = useRef<string | null>(null);
   const hasChannelsRef = useRef(false);
 
@@ -583,11 +594,15 @@ function App() {
       setBackendServerInput(server.trim());
 
       const deviceId = await getOrCreateDeviceId();
+      const deviceInfo = await getDeviceInfo();
+
       const response = await login({
         username,
         password,
         deviceId,
         deviceName: 'Android TV',
+        manufacturer: deviceInfo.manufacturer,
+        model: deviceInfo.model,
       });
       const nextAuthSession = {
         token: response.token,
@@ -600,10 +615,74 @@ function App() {
       setActiveChannel(null);
       await loadChannelsForToken(response.token);
     } catch (error) {
+      // Manejar error de límite de sesiones (409)
+      if (error instanceof ApiError && error.status === 409 && error.code === 'DEVICE_LIMIT_REACHED') {
+        if (error.activeSessions && error.activeSessions.length > 0) {
+          setActiveSessions(error.activeSessions);
+          setPendingLoginCredentials({ username, password, server });
+          setSessionLimitModalVisible(true);
+          return;
+        }
+      }
+
       setLoginError(getLoginErrorMessage(error));
     } finally {
       setIsLoginLoading(false);
     }
+  };
+
+  const handleRevokeAndRetryLogin = async (sessionId: string) => {
+    if (!pendingLoginCredentials || isSessionRevoking) {
+      return;
+    }
+
+    setIsSessionRevoking(true);
+
+    try {
+      // Crear una sesión temporal para revocar el dispositivo
+      const tempDeviceId = await getOrCreateDeviceId();
+      const tempDeviceInfo = await getDeviceInfo();
+
+      // Obtener un token temporal haciendo login
+      const tempResponse = await login({
+        username: pendingLoginCredentials.username,
+        password: pendingLoginCredentials.password,
+        deviceId: tempDeviceId,
+        deviceName: 'Android TV',
+        manufacturer: tempDeviceInfo.manufacturer,
+        model: tempDeviceInfo.model,
+      });
+
+      // Revocar la sesión seleccionada
+      await revokeSession(tempResponse.token, sessionId);
+
+      // Ahora intentar login nuevamente
+      setSessionLimitModalVisible(false);
+      setActiveSessions([]);
+      setPendingLoginCredentials(null);
+
+      // Reintentar el login
+      await handleLogin(
+        pendingLoginCredentials.username,
+        pendingLoginCredentials.password,
+        pendingLoginCredentials.server,
+      );
+    } catch (error) {
+      console.error('Error al revocar sesión:', error);
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : 'Error al cerrar la sesión anterior.',
+      );
+    } finally {
+      setIsSessionRevoking(false);
+    }
+  };
+
+  const handleDismissSessionLimitModal = () => {
+    setSessionLimitModalVisible(false);
+    setActiveSessions([]);
+    setPendingLoginCredentials(null);
   };
 
   // Renderizar UI bloqueante si forceUpdate está activo
@@ -727,6 +806,15 @@ function App() {
             )}
           </>
         )}
+
+        {/* Modal de límite de sesiones */}
+        <SessionLimitModal
+          visible={sessionLimitModalVisible}
+          sessions={activeSessions}
+          isLoading={isSessionRevoking || isLoginLoading}
+          onSessionSelect={handleRevokeAndRetryLogin}
+          onDismiss={handleDismissSessionLimitModal}
+        />
       </View>
     </SafeAreaProvider>
   );
