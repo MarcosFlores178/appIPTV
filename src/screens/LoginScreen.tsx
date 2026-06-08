@@ -60,16 +60,24 @@ export default function LoginScreen({
         <Text style={styles.copy}>Usa tu usuario para habilitar este TV.</Text>
 
         <View style={styles.form}>
-          <View style={styles.serverToggleRow}>
+          <Pressable
+            onPress={() => !isLoading && setIsServerEditableMode(v => !v)}
+            disabled={isLoading}
+            style={({ focused, pressed }) => [
+              styles.serverToggleRow,
+              focused && styles.serverToggleRowFocused,
+              pressed && styles.serverToggleRowPressed,
+            ]}
+          >
             <Switch
               value={isServerEditableMode}
-              onValueChange={setIsServerEditableMode}
               thumbColor={isServerEditableMode ? '#ffffff' : '#d8d8d8'}
               trackColor={{ false: '#555', true: '#ff7a1a' }}
               disabled={isLoading}
+              focusable={false}
             />
             <Text style={styles.serverToggleLabel}>Seleccionar servidor</Text>
-          </View>
+          </Pressable>
 
           <TextInput
             ref={serverRef}
@@ -80,8 +88,10 @@ export default function LoginScreen({
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isLoading && isServerEditableMode}
+            focusable={!isLoading && isServerEditableMode}
             keyboardType="url"
             onSubmitEditing={() => usernameRef.current?.focus()}
+            blurOnSubmit={false}
             returnKeyType="next"
             style={[styles.input, !isServerEditableMode && styles.inputDisabled]}
           />
@@ -96,6 +106,7 @@ export default function LoginScreen({
             autoCorrect={false}
             editable={!isLoading}
             onSubmitEditing={() => passwordRef.current?.focus()}
+            blurOnSubmit={false}
             returnKeyType="next"
             style={styles.input}
           />
@@ -111,6 +122,7 @@ export default function LoginScreen({
             editable={!isLoading}
             secureTextEntry
             onSubmitEditing={() => loginButtonRef.current?.focus()}
+            blurOnSubmit={false}
             returnKeyType="done"
             style={styles.input}
           />
@@ -190,8 +202,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
     marginBottom: 4,
+  },
+
+  serverToggleRowFocused: {
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.02 }],
+  },
+
+  serverToggleRowPressed: {
+    opacity: 0.8,
   },
 
   serverToggleLabel: {

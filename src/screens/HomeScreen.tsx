@@ -339,6 +339,7 @@ export default function HomeScreen({
                 value={shouldLogoutOnExit}
                 onValueChange={setShouldLogoutOnExit}
                 disabled={isExiting}
+                focusable={false}
                 thumbColor={shouldLogoutOnExit ? '#ffffff' : '#d8d8d8'}
                 trackColor={{ false: '#555', true: '#ff7a1a' }}
               />
