@@ -1,9 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BACKEND_SERVER_KEY = '@EstranetTV:backend-server';
+const CONFIG_VERSION_KEY = '@EstranetTV:config-version';
 const DEFAULT_BACKEND_PORT = '4000';
 
-export const DEFAULT_BACKEND_SERVER_INPUT = '192.168.130.22';
+export const DEFAULT_PUBLIC_IP = '181.209.79.77';
+export const DEFAULT_PRIVATE_IP = '192.168.130.22';
+export const CONFIG_VERSION = 1;
+
+export const DEFAULT_BACKEND_SERVER_INPUT = DEFAULT_PRIVATE_IP;
 
 export class BackendConfigError extends Error {
   constructor(message: string) {
@@ -43,7 +48,18 @@ export const normalizeBackendServerInput = (value: string): string => {
 };
 
 export const getBackendServerInput = async (): Promise<string> => {
-  const storedValue = await AsyncStorage.getItem(BACKEND_SERVER_KEY);
+  const [storedValue, storedVersion] = await Promise.all([
+    AsyncStorage.getItem(BACKEND_SERVER_KEY),
+    AsyncStorage.getItem(CONFIG_VERSION_KEY),
+  ]);
+
+  const version = storedVersion ? parseInt(storedVersion, 10) : 0;
+
+  // Si la versión es vieja o no existe, forzamos la IP por defecto del código
+  if (version < CONFIG_VERSION) {
+    return DEFAULT_BACKEND_SERVER_INPUT;
+  }
+
   return storedValue || DEFAULT_BACKEND_SERVER_INPUT;
 };
 
@@ -54,6 +70,10 @@ export const saveBackendServerInput = async (value: string): Promise<string> => 
   const trimmedValue = value.trim().replace(/\/+$/, '');
   const normalizedValue = normalizeBackendServerInput(trimmedValue);
 
-  await AsyncStorage.setItem(BACKEND_SERVER_KEY, trimmedValue);
+  await Promise.all([
+    AsyncStorage.setItem(BACKEND_SERVER_KEY, trimmedValue),
+    AsyncStorage.setItem(CONFIG_VERSION_KEY, CONFIG_VERSION.toString()),
+  ]);
+
   return normalizedValue;
 };

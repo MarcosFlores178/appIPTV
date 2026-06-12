@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { DEFAULT_PRIVATE_IP, DEFAULT_PUBLIC_IP } from '../services/backendConfig';
 
 const appLogo = require('../../assets/branding/app-logo.png');
 
@@ -28,21 +29,15 @@ export default function LoginScreen({
   const [server, setServer] = useState(initialServer);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [isServerEditableMode, setIsServerEditableMode] = useState(false);
   
-  const serverRef = useRef<TextInput>(null);
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const loginButtonRef = useRef<any>(null);
 
   useEffect(() => {
-    // Al montar, enfocar en el campo usuario (o servidor si está en modo edición)
-    if (isServerEditableMode) {
-      serverRef.current?.focus();
-    } else {
-      usernameRef.current?.focus();
-    }
-  }, [isServerEditableMode]);
+    // Al montar, enfocar siempre en el campo usuario
+    usernameRef.current?.focus();
+  }, []);
 
   const handleSubmit = () => {
     if (isLoading) {
@@ -57,44 +52,48 @@ export default function LoginScreen({
       <View style={styles.panel}>
         <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.logo} />
         <Text style={styles.title}>Ingresar</Text>
-        <Text style={styles.copy}>Usa tu usuario para habilitar este TV.</Text>
+        <Text style={styles.copy}>Selecciona tu red e ingresa tus credenciales.</Text>
 
         <View style={styles.form}>
-          <Pressable
-            onPress={() => !isLoading && setIsServerEditableMode(v => !v)}
-            disabled={isLoading}
-            style={({ focused, pressed }) => [
-              styles.serverToggleRow,
-              focused && styles.serverToggleRowFocused,
-              pressed && styles.serverToggleRowPressed,
-            ]}
-          >
-            <Switch
-              value={isServerEditableMode}
-              thumbColor={isServerEditableMode ? '#ffffff' : '#d8d8d8'}
-              trackColor={{ false: '#555', true: '#ff7a1a' }}
+          <View style={styles.quickSelectContainer}>
+            <Pressable
+              onPress={() => !isLoading && setServer(DEFAULT_PRIVATE_IP)}
               disabled={isLoading}
-              focusable={false}
-            />
-            <Text style={styles.serverToggleLabel}>Seleccionar servidor</Text>
-          </Pressable>
+              style={({ focused }) => [
+                styles.quickButton,
+                focused && styles.quickButtonFocused,
+                server === DEFAULT_PRIVATE_IP && styles.quickButtonActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickButtonText,
+                  server === DEFAULT_PRIVATE_IP && styles.quickButtonTextActive,
+                ]}
+              >
+                Red Local
+              </Text>
+            </Pressable>
 
-          <TextInput
-            ref={serverRef}
-            value={server}
-            onChangeText={setServer}
-            placeholder="Servidor backend"
-            placeholderTextColor="#777"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isLoading && isServerEditableMode}
-            focusable={!isLoading && isServerEditableMode}
-            keyboardType="url"
-            onSubmitEditing={() => usernameRef.current?.focus()}
-            blurOnSubmit={false}
-            returnKeyType="next"
-            style={[styles.input, !isServerEditableMode && styles.inputDisabled]}
-          />
+            <Pressable
+              onPress={() => !isLoading && setServer(DEFAULT_PUBLIC_IP)}
+              disabled={isLoading}
+              style={({ focused }) => [
+                styles.quickButton,
+                focused && styles.quickButtonFocused,
+                server === DEFAULT_PUBLIC_IP && styles.quickButtonActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickButtonText,
+                  server === DEFAULT_PUBLIC_IP && styles.quickButtonTextActive,
+                ]}
+              >
+                Internet
+              </Text>
+            </Pressable>
+          </View>
 
           <TextInput
             ref={usernameRef}
@@ -105,7 +104,9 @@ export default function LoginScreen({
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isLoading}
-            onSubmitEditing={() => passwordRef.current?.focus()}
+            onSubmitEditing={() => {
+              passwordRef.current?.focus();
+            }}
             blurOnSubmit={false}
             returnKeyType="next"
             style={styles.input}
@@ -121,8 +122,11 @@ export default function LoginScreen({
             autoCorrect={false}
             editable={!isLoading}
             secureTextEntry
-            onSubmitEditing={() => loginButtonRef.current?.focus()}
-            blurOnSubmit={false}
+            onSubmitEditing={() => {
+              Keyboard.dismiss();
+              loginButtonRef.current?.focus();
+            }}
+            blurOnSubmit={true}
             returnKeyType="done"
             style={styles.input}
           />
@@ -198,31 +202,42 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
 
-  serverToggleRow: {
+  quickSelectContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
     marginBottom: 4,
   },
 
-  serverToggleRowFocused: {
-    borderColor: '#ffffff',
+  quickButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  quickButtonFocused: {
+    borderColor: '#fff',
+    backgroundColor: '#222',
     transform: [{ scale: 1.02 }],
   },
 
-  serverToggleRowPressed: {
-    opacity: 0.8,
+  quickButtonActive: {
+    backgroundColor: '#ff7a1a22',
+    borderColor: '#ff7a1a',
   },
 
-  serverToggleLabel: {
-    color: '#bdbdbd',
+  quickButtonText: {
+    color: '#aaa',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+
+  quickButtonTextActive: {
+    color: '#ff7a1a',
   },
 
   input: {
@@ -234,12 +249,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     paddingHorizontal: 16,
-  },
-
-  inputDisabled: {
-    opacity: 0.5,
-    backgroundColor: '#0f0f0f',
-    borderColor: '#222',
   },
 
   errorText: {

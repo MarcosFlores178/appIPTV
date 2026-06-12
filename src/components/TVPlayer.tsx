@@ -13,8 +13,12 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showChannelName, setShowChannelName] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [playerKey, setPlayerKey] = useState(0);
+  
   const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasBufferingRef = useRef(false);
+  const maxRetries = 3;
 
   useEffect(() => {
     setIsLoading(true);
@@ -22,6 +26,8 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     setErrorMessage(null);
     setShowChannelName(false);
     setHasPlaybackStarted(false);
+    setRetryCount(0);
+    setPlayerKey(prev => prev + 1);
     wasBufferingRef.current = false;
 
     if (channelNameTimerRef.current) {
@@ -67,6 +73,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     <View style={styles.playerShell}>
       <View style={styles.videoCard}>
         <Video
+          key={`${channel.id}-${playerKey}`}
           source={{
             uri: channel.url,
             // 🔽 AQUÍ AÑADIMOS EL USER AGENT AMIGABLE 🔽
@@ -74,9 +81,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
             },
             bufferConfig: {
-              minBufferMs: 15000,
-              maxBufferMs: 50000,
-              bufferForPlaybackMs: 2500,
+              minBufferMs: 25000,
+              maxBufferMs: 60000,
+              bufferForPlaybackMs: 3000,
               bufferForPlaybackAfterRebufferMs: 5000,
             },
           }}
@@ -94,9 +101,18 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           onLoad={() => {
             setIsLoading(false);
             setHasPlaybackStarted(true);
+            setRetryCount(0); // Reset retry on success
           }}
           onBuffer={handleBuffer}
           onError={event => {
+            if (retryCount < maxRetries) {
+              console.log(`Playback error, retrying (${retryCount + 1}/${maxRetries})...`);
+              setIsLoading(true);
+              setRetryCount(prev => prev + 1);
+              setPlayerKey(prev => prev + 1);
+              return;
+            }
+
             setIsLoading(false);
             setIsBuffering(false);
             setErrorMessage(

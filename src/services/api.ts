@@ -138,6 +138,30 @@ export const revokeSession = async (
   await parseJsonResponse<{ ok: boolean }>(response);
 };
 
+export const revokeSessionWithCredentials = async ({
+  username,
+  password,
+  sessionId,
+}: {
+  username: string;
+  password: string;
+  sessionId: string;
+}): Promise<void> => {
+  const response = await fetch(await getApiUrl('/auth/revoke-session'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username,
+      password,
+      sessionId,
+    }),
+  });
+
+  await parseJsonResponse<{ ok: boolean }>(response);
+};
+
 export const getChannelsSnapshot = async (token: string): Promise<ChannelsResponse> => {
   const response = await fetch(await getApiUrl('/channels'), {
     headers: {

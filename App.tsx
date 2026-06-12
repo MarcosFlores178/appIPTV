@@ -26,6 +26,7 @@ import {
   login,
   logout,
   revokeSession,
+  revokeSessionWithCredentials,
 } from './src/services/api';
 import {
   BackendConfigError,
@@ -277,7 +278,7 @@ function App() {
       setBackendServerInput(storedBackendServerInput);
       setFavoriteIds(favorites);
 
-      if (!storedAuthSession) {
+      if (!storedAuthSession || !storedBackendServerInput) {
         setIsAuthReady(true);
         return;
       }
@@ -639,38 +640,29 @@ function App() {
     setIsSessionRevoking(true);
 
     try {
-      // Crear una sesión temporal para revocar el dispositivo
-      const tempDeviceId = await getOrCreateDeviceId();
-      const tempDeviceInfo = await getDeviceInfo();
-
-      // Obtener un token temporal haciendo login
-      const tempResponse = await login({
+      // Revocar la sesión seleccionada usando credenciales directamente
+      await revokeSessionWithCredentials({
         username: pendingLoginCredentials.username,
         password: pendingLoginCredentials.password,
-        deviceId: tempDeviceId,
-        deviceName: 'Android TV',
-        manufacturer: tempDeviceInfo.manufacturer,
-        model: tempDeviceInfo.model,
+        sessionId,
       });
-
-      // Revocar la sesión seleccionada
-      await revokeSession(tempResponse.token, sessionId);
 
       // Ahora intentar login nuevamente
       setSessionLimitModalVisible(false);
       setActiveSessions([]);
+      const credentialsToRetry = { ...pendingLoginCredentials };
       setPendingLoginCredentials(null);
 
       // Reintentar el login
       await handleLogin(
-        pendingLoginCredentials.username,
-        pendingLoginCredentials.password,
-        pendingLoginCredentials.server,
+        credentialsToRetry.username,
+        credentialsToRetry.password,
+        credentialsToRetry.server,
       );
     } catch (error) {
       console.error('Error al revocar sesión:', error);
       setLoginError(
-        error instanceof Error
+        error instanceof ApiError
           ? error.message
           : 'Error al cerrar la sesión anterior.',
       );
