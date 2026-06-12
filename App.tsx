@@ -9,8 +9,6 @@ import {
   View,
   ActivityIndicator,
   Alert,
-  Pressable,
-  Text,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppSplashScreen from './src/components/AppSplashScreen';
@@ -25,7 +23,6 @@ import {
   getCurrentSession,
   login,
   logout,
-  revokeSession,
   revokeSessionWithCredentials,
 } from './src/services/api';
 import {
@@ -80,7 +77,6 @@ interface ChannelsLoadState {
 
 const MISSING_PLAYLIST_MESSAGE =
   'No hay playlist configurada. Contactá al administrador.';
-const LOADING_CHANNELS_MESSAGE = 'Cargando canales...';
 const TEMPORARY_CHANNELS_MESSAGE =
   'No se pudieron cargar los canales. Intentá nuevamente.';
 const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Ingresá nuevamente.';
@@ -755,49 +751,46 @@ function App() {
         )}
 
         {/* Mostrar login o contenido principal */}
-        {!showSplash && isAuthReady && !updateState.isChecking && (
-          <>
-            {!authSession ? (
-              <LoginScreen
-                initialServer={backendServerInput}
-                errorMessage={loginError}
-                isLoading={isLoginLoading}
-                onLogin={handleLogin}
-              />
-            ) : channelsLoadState.status === 'missing_playlist' ||
-              channelsLoadState.status === 'temporary_error' ||
-              channelsLoadState.status === 'loading' ? (
-              <ChannelsUnavailableScreen
-                isLoading={channelsLoadState.status === 'loading'}
-                message={
-                  channelsLoadState.status === 'loading'
-                    ? LOADING_CHANNELS_MESSAGE
-                    : channelsLoadState.message || TEMPORARY_CHANNELS_MESSAGE
-                }
-                onRetry={handleRetryChannels}
-              />
-            ) : activeChannel ? (
-              <PlayerScreen
-                channel={activeChannel}
-                channels={channels}
-                onBack={() => setActiveChannel(null)}
-                onChangeChannel={setActiveChannel}
-                isFavorite={favoriteIds.includes(activeChannel.id)}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            ) : (
-              <HomeScreen
-                channels={channels}
-                selectedCategory={homeSelectedCategory}
-                sortMode={homeSortMode}
-                onSelectCategory={setHomeSelectedCategory}
-                onSelectSortMode={setHomeSortMode}
-                onOpenChannel={setActiveChannel}
-                onRequestExit={handleRequestExit}
-              />
-            )}
-          </>
-        )}
+{!showSplash && isAuthReady && !updateState.isChecking && (
+  <>
+    {!authSession ? (
+      <LoginScreen
+        initialServer={backendServerInput}
+        errorMessage={loginError}
+        isLoading={isLoginLoading}
+        onLogin={handleLogin}
+      />
+    ) : activeChannel ? (
+      <PlayerScreen
+        channel={activeChannel}
+        channels={channels}
+        onBack={() => setActiveChannel(null)}
+        onChangeChannel={setActiveChannel}
+        isFavorite={favoriteIds.includes(activeChannel.id)}
+        onToggleFavorite={handleToggleFavorite}
+      />
+    ) : (
+      /* Siempre entramos al Home, pero inyectamos el estado de carga y error */
+      <HomeScreen
+        channels={channels}
+        channelsLoading={channelsLoadState.status === 'loading'}
+        channelsError={
+          channelsLoadState.status === 'missing_playlist' || 
+          channelsLoadState.status === 'temporary_error'
+            ? channelsLoadState.message || 'No hay lista de canales asignada.'
+            : null
+        }
+        onRetryChannels={handleRetryChannels} // Para que puedan reintentar desde el Home
+        selectedCategory={homeSelectedCategory}
+        sortMode={homeSortMode}
+        onSelectCategory={setHomeSelectedCategory}
+        onSelectSortMode={setHomeSortMode}
+        onOpenChannel={setActiveChannel}
+        onRequestExit={handleRequestExit}
+      />
+    )}
+  </>
+)}
 
         {/* Modal de límite de sesiones */}
         <SessionLimitModal
@@ -812,41 +805,6 @@ function App() {
   );
 }
 
-function ChannelsUnavailableScreen({
-  isLoading,
-  message,
-  onRetry,
-}: {
-  isLoading: boolean;
-  message: string;
-  onRetry: () => Promise<void>;
-}) {
-  return (
-    <View style={styles.channelsUnavailableContainer}>
-      <Text style={styles.channelsUnavailableTitle}>
-        {isLoading ? 'Cargando canales' : 'Canales no disponibles'}
-      </Text>
-      <Text style={styles.channelsUnavailableMessage}>{message}</Text>
-      <Pressable
-        onPress={() => onRetry().catch(() => undefined)}
-        disabled={isLoading}
-        hasTVPreferredFocus
-        style={({ pressed, focused }) => [
-          styles.retryButton,
-          focused && styles.retryButtonFocused,
-          pressed && styles.retryButtonPressed,
-          isLoading && styles.retryButtonDisabled,
-        ]}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#111" />
-        ) : (
-          <Text style={styles.retryButtonText}>Reintentar</Text>
-        )}
-      </Pressable>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: {

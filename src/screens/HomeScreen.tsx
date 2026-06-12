@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator, // <-- AGREGAR ESTO
   BackHandler,
   Image,
   Modal,
@@ -28,6 +29,9 @@ import { IPTVChannel } from '../types/iptv';
 
 interface HomeScreenProps {
   channels: IPTVChannel[];
+  channelsLoading: boolean;       // <-- NUEVO: Para saber si el backend sigue cargando
+  channelsError: string | null;   // <-- NUEVO: Para recibir el mensaje de error si falla
+  onRetryChannels: () => Promise<void>; // <-- NUEVO: La función de reintento que viene de App.tsx
   selectedCategory: string;
   sortMode: ChannelSortMode;
   onSelectCategory: (category: string) => void;
@@ -40,13 +44,16 @@ const appLogo = require('../../assets/branding/app-logo.png');
 
 export default function HomeScreen({
   channels: allChannels,
+  channelsLoading,   // <-- NUEVO
+  channelsError,     // <-- NUEVO
+  onRetryChannels,   // <-- NUEVO
   selectedCategory,
   sortMode,
   onSelectCategory,
   onSelectSortMode,
   onOpenChannel,
   onRequestExit,
-}: HomeScreenProps) {
+}: HomeScreenProps)  {
   const [selectedChannel, setSelectedChannel] = useState<string>(
     allChannels[0]?.id ?? '',
   );
@@ -305,13 +312,37 @@ export default function HomeScreen({
         </View>
       </View>
 
-      <ChannelGrid
-        channels={channels}
-        selectedChannelId={selectedChannel}
-        onChannelPress={handleChannelPress}
-        emptyMessage={emptyMessage}
-        groupByCategory={sortMode === 'group'}
-      />
+    {/* REEMPLAZAR EL <ChannelGrid /> POR ESTO: */}
+      {channelsLoading ? (
+        <View style={styles.centerMessageContainer}>
+          <ActivityIndicator size="large" color="#ff7a1a" />
+          <Text style={styles.messageText}>Cargando canales...</Text>
+        </View>
+      ) : channelsError ? (
+        <View style={styles.centerMessageContainer}>
+          <Text style={styles.errorTitle}>Error al cargar</Text>
+          <Text style={styles.messageText}>{channelsError}</Text>
+          <Pressable
+            hasTVPreferredFocus
+            onPress={() => onRetryChannels().catch(() => undefined)}
+            style={({ focused }) => [
+              styles.retryButton,
+              focused && styles.retryButtonFocused
+            ]}
+          >
+            <Text style={styles.retryButtonText}>Reintentar</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ChannelGrid
+          channels={channels}
+          selectedChannelId={selectedChannel}
+          onChannelPress={handleChannelPress}
+          emptyMessage={emptyMessage}
+          groupByCategory={sortMode === 'group'}
+        />
+      )}
+      {/* HASTA ACÁ */}
 
       <Modal
         animationType="fade"
@@ -412,6 +443,42 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+centerMessageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  messageText: {
+    color: '#fff',
+    fontSize: 18,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorTitle: {
+    color: '#ff4444',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  retryButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#333',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  retryButtonFocused: {
+    borderColor: '#ff7a1a',
+    backgroundColor: '#444',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 
   title: {

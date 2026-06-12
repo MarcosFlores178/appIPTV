@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-native';
 import Video, { ResizeMode, type OnBufferData } from 'react-native-video';
 import { IPTVChannel } from '../types/iptv';
 
@@ -17,8 +17,8 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [playerKey, setPlayerKey] = useState(0);
   
   const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wasBufferingRef = useRef(false);
-  const maxRetries = 3;
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxRetries = 5;
 
   useEffect(() => {
     setIsLoading(true);
@@ -27,43 +27,67 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     setShowChannelName(false);
     setHasPlaybackStarted(false);
     setRetryCount(0);
-    setPlayerKey(prev => prev + 1);
-    wasBufferingRef.current = false;
-
-    if (channelNameTimerRef.current) {
-      clearTimeout(channelNameTimerRef.current);
-      channelNameTimerRef.current = null;
-    }
-
-    return () => {
+    
+    const clearAllTimers = () => {
       if (channelNameTimerRef.current) {
         clearTimeout(channelNameTimerRef.current);
         channelNameTimerRef.current = null;
       }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+
+    clearAllTimers();
+
+    return () => {
+      clearAllTimers();
     };
   }, [channel.id, channel.url]);
 
+  useEffect(() => {
+    // Si no estamos en proceso de reconexión, no interceptamos el botón nativo
+    if (retryCount === 0) {
+      return;
+    }
+
+    const backAction = () => {
+      console.log('Usuario abortó la reconexión. Limpiando timer de reintento...');
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      return false; // Permite que la navegación vuelva a la grilla normalmente
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    return () => {
+      backHandler.remove();
+    };
+  }, [retryCount]);
+
   // Mostrar el nombre cuando el buffering se complete después de haber empezado
   useEffect(() => {
-    if (hasPlaybackStarted && !isBuffering && wasBufferingRef.current) {
+    if (hasPlaybackStarted) {
       // El video pasó de buffering a reproduciendo normalmente
       if (channelNameTimerRef.current) {
         clearTimeout(channelNameTimerRef.current);
       }
 
       setShowChannelName(true);
+
       channelNameTimerRef.current = setTimeout(() => {
         setShowChannelName(false);
         channelNameTimerRef.current = null;
       }, 3000);
 
-      wasBufferingRef.current = false;
     }
-
-    if (isBuffering) {
-      wasBufferingRef.current = true;
-    }
-  }, [isBuffering, hasPlaybackStarted]);
+  }, [hasPlaybackStarted]);
 
   const handleBuffer = ({ isBuffering: nextIsBuffering }: OnBufferData) => {
     setIsBuffering(nextIsBuffering);
@@ -96,20 +120,39 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           ignoreSilentSwitch="ignore"
           onLoadStart={() => {
             setIsLoading(true);
+            setIsBuffering(false); // 🚀 Resetear el buffer fantasma al iniciar el zap
             setErrorMessage(null);
           }}
           onLoad={() => {
             setIsLoading(false);
             setHasPlaybackStarted(true);
-            setRetryCount(0); // Reset retry on success
+          }}
+          onReadyForDisplay={() => {
+            // El primer frame del video ya es visible en la TV
+            setRetryCount(0);
+            setIsBuffering(false); // 🚀 Forzar el apagado por si el evento nativo falló
+            if (retryTimerRef.current) {
+              clearTimeout(retryTimerRef.current);
+              retryTimerRef.current = null;
+            }
           }}
           onBuffer={handleBuffer}
           onError={event => {
             if (retryCount < maxRetries) {
-              console.log(`Playback error, retrying (${retryCount + 1}/${maxRetries})...`);
+              const nextRetry = retryCount + 1;
+              const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+              
+              console.log(`Playback error, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`);
+              
               setIsLoading(true);
-              setRetryCount(prev => prev + 1);
-              setPlayerKey(prev => prev + 1);
+              setRetryCount(nextRetry);
+              
+              if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+              retryTimerRef.current = setTimeout(() => {
+                setPlayerKey(prev => prev + 1);
+                retryTimerRef.current = null;
+              }, delay);
+              
               return;
             }
 
@@ -134,9 +177,11 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               <>
                 <ActivityIndicator size="large" color="#ffffff" />
                 <Text style={styles.statusText}>
-                  {isBuffering
-                    ? 'Buffering del stream...'
-                    : 'Cargando stream...'}
+                  {retryCount > 0
+                  ? `Reconectando... (intento ${retryCount}/${maxRetries})`
+                  : isLoading
+                    ? 'Cargando stream...'
+                    : 'Buffering del stream...'}
                 </Text>
               </>
             )}
@@ -160,16 +205,12 @@ const styles = StyleSheet.create({
   },
 
   videoCard: {
-    flex: 1,
-    borderRadius: 0,
-    overflow: 'hidden',
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
-    borderWidth: 0,
   },
 
   video: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
   },
 
@@ -195,9 +236,13 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 5,
+    // textShadowColor: '#000',
+    // textShadowOffset: { width: 0, height: 2 },
+    // textShadowRadius: 5,
+    // 🔽 AQUÍ ESTÁ EL CAMBIO 🔽
+    textShadowColor: 'rgba(0, 0, 0, 0.95)', // Sombra negra casi opaca
+    textShadowOffset: { width: 1, height: 2 }, // Un poquito de offset lateral también
+    textShadowRadius: 1.5, // 👈 BAJAMOS EL RADIO para que la sombra sea "dura" y actúe como borde
   },
 
   statusText: {
@@ -223,52 +268,5 @@ const styles = StyleSheet.create({
     maxWidth: 640,
   },
 
-  infoCard: {
-    borderRadius: 18,
-    backgroundColor: '#121212',
-    borderWidth: 1,
-    borderColor: '#2c2c2c',
-    padding: 24,
-  },
-
-  title: {
-    color: '#fff',
-    fontSize: 34,
-    fontWeight: '800',
-  },
-
-  subtitle: {
-    color: '#cfcfcf',
-    fontSize: 18,
-    marginTop: 8,
-  },
-
-  description: {
-    color: '#b4b4b4',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 18,
-  },
-
-  metaCard: {
-    borderRadius: 18,
-    backgroundColor: '#121212',
-    borderWidth: 1,
-    borderColor: '#2c2c2c',
-    padding: 20,
-  },
-
-  metaLabel: {
-    color: '#a1a1a1',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-  },
-
-  metaValue: {
-    color: '#fff',
-    fontSize: 14,
-    lineHeight: 22,
-  },
+  
 });

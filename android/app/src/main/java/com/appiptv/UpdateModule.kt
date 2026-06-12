@@ -41,14 +41,15 @@ class UpdateModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
     @ReactMethod
     fun downloadAndInstallApk(apkUrl: String, versionName: String, promise: Promise) {
+        val trimmedUrl = apkUrl.trim()
         try {
-            Log.d("UpdateModule", "Starting download from: $apkUrl")
+            Log.d("UpdateModule", "Starting download from: '$trimmedUrl'")
             val destination = File(reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
             if (destination.exists()) {
                 destination.delete()
             }
 
-            val request = DownloadManager.Request(Uri.parse(apkUrl))
+            val request = DownloadManager.Request(Uri.parse(trimmedUrl))
                 .setTitle("Actualizando Estranet TV")
                 .setDescription("Descargando versión $versionName")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)

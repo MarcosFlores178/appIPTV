@@ -32,133 +32,138 @@ export default function LoginScreen({
   
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const loginButtonRef = useRef<any>(null);
+  const loginButtonRef = useRef<View>(null);
 
   useEffect(() => {
-    // Al montar, enfocar siempre en el campo usuario
     usernameRef.current?.focus();
   }, []);
 
+  // Función auxiliar para validar si el formulario es válido
+  const isFormValid = () => {
+    return !isLoading && server.trim() && username.trim() && password;
+  };
+
   const handleSubmit = () => {
-    if (isLoading) {
+    if (!isFormValid()) {
       return;
     }
-
+    Keyboard.dismiss(); // Asegura que el teclado se cierre al procesar
     onLogin(username.trim(), password, server).catch(() => undefined);
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.panel}>
-        <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.logo} />
-        <Text style={styles.title}>Ingresar</Text>
-        <Text style={styles.copy}>Selecciona tu red e ingresa tus credenciales.</Text>
+  <View style={styles.container}>
+    <View style={styles.panel}>
+      <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.logo} />
+      <Text style={styles.title}>Ingresar</Text>
+      <Text style={styles.copy}>Selecciona tu red e ingresa tus credenciales.</Text>
 
-        <View style={styles.form}>
-          <View style={styles.quickSelectContainer}>
-            <Pressable
-              onPress={() => !isLoading && setServer(DEFAULT_PRIVATE_IP)}
-              disabled={isLoading}
-              style={({ focused }) => [
-                styles.quickButton,
-                focused && styles.quickButtonFocused,
-                server === DEFAULT_PRIVATE_IP && styles.quickButtonActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.quickButtonText,
-                  server === DEFAULT_PRIVATE_IP && styles.quickButtonTextActive,
-                ]}
-              >
-                Red Local
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => !isLoading && setServer(DEFAULT_PUBLIC_IP)}
-              disabled={isLoading}
-              style={({ focused }) => [
-                styles.quickButton,
-                focused && styles.quickButtonFocused,
-                server === DEFAULT_PUBLIC_IP && styles.quickButtonActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.quickButtonText,
-                  server === DEFAULT_PUBLIC_IP && styles.quickButtonTextActive,
-                ]}
-              >
-                Internet
-              </Text>
-            </Pressable>
-          </View>
-
-          <TextInput
-            ref={usernameRef}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Usuario"
-            placeholderTextColor="#777"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isLoading}
-            onSubmitEditing={() => {
-              passwordRef.current?.focus();
-            }}
-            blurOnSubmit={false}
-            returnKeyType="next"
-            style={styles.input}
-          />
-
-          <TextInput
-            ref={passwordRef}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Contraseña"
-            placeholderTextColor="#777"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isLoading}
-            secureTextEntry
-            onSubmitEditing={() => {
-              Keyboard.dismiss();
-              loginButtonRef.current?.focus();
-            }}
-            blurOnSubmit={true}
-            returnKeyType="done"
-            style={styles.input}
-          />
-
-          {errorMessage ? (
-            <Text style={styles.errorText}>{errorMessage}</Text>
-          ) : null}
-
+      <View style={styles.form}>
+        <View style={styles.quickSelectContainer}>
           <Pressable
-            ref={loginButtonRef}
-            onPress={handleSubmit}
-            disabled={
-              isLoading || !server.trim() || !username.trim() || !password
-            }
-            style={({ pressed, focused }) => [
-              styles.loginButton,
-              focused && styles.loginButtonFocused,
-              pressed && styles.loginButtonPressed,
-              (isLoading || !username.trim() || !password) &&
-                styles.loginButtonDisabled,
+            onPress={() => !isLoading && setServer(DEFAULT_PRIVATE_IP)}
+            disabled={isLoading}
+            nextFocusDown={usernameRef.current|| undefined}
+            style={({ focused }) => [
+              styles.quickButton,
+              focused && styles.quickButtonFocused,
+              server === DEFAULT_PRIVATE_IP && styles.quickButtonActive,
             ]}
           >
-            {isLoading ? (
-              <ActivityIndicator color="#111" />
-            ) : (
-              <Text style={styles.loginButtonText}>Entrar</Text>
-            )}
+            <Text
+              style={[
+                styles.quickButtonText,
+                server === DEFAULT_PRIVATE_IP && styles.quickButtonTextActive,
+              ]}
+            >
+              Red Local
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => !isLoading && setServer(DEFAULT_PUBLIC_IP)}
+            disabled={isLoading}
+            style={({ focused }) => [
+              styles.quickButton,
+              focused && styles.quickButtonFocused,
+              server === DEFAULT_PUBLIC_IP && styles.quickButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.quickButtonText,
+                server === DEFAULT_PUBLIC_IP && styles.quickButtonTextActive,
+              ]}
+            >
+              Internet
+            </Text>
           </Pressable>
         </View>
+
+        <TextInput
+          ref={usernameRef}
+          value={username}
+          onChangeText={setUsername}
+          placeholder="Usuario"
+          placeholderTextColor="#777"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isLoading}
+          onSubmitEditing={() => {
+            passwordRef.current?.focus();
+          }}
+          blurOnSubmit={false}
+          returnKeyType="next"
+          style={styles.input}
+        />
+
+        <TextInput
+          ref={passwordRef}
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Contraseña"
+          placeholderTextColor="#777"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isLoading}
+          secureTextEntry
+          submitBehavior="blurAndSubmit" // Reemplaza a blurOnSubmit={true}
+          returnKeyType="done"
+          style={styles.input}
+          onSubmitEditing={() => {
+            // Ya no hace falta Keyboard.dismiss() acá porque blurAndSubmit lo maneja
+            if (isFormValid()) {
+              handleSubmit();
+            }
+          }}
+        />
+
+        {errorMessage ? (
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        ) : null}
+
+        <Pressable
+          ref={loginButtonRef as any}
+          onPress={handleSubmit}
+          disabled={!isFormValid()}
+          focusable={true} // Forzamos a que el sistema operativo de la TV lo reconozca como enfocable
+          style={({ pressed, focused }) => [
+            styles.loginButton,
+            focused && styles.loginButtonFocused,
+            pressed && styles.loginButtonPressed,
+            !isFormValid() && styles.loginButtonDisabled,
+          ]}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#111" />
+          ) : (
+            <Text style={styles.loginButtonText}>Entrar</Text>
+          )}
+        </Pressable>
       </View>
     </View>
-  );
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
