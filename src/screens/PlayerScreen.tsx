@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   useTVEventHandler,
+  Pressable,
   View,
 } from 'react-native';
 import TVPlayer from '../components/TVPlayer';
@@ -56,38 +57,31 @@ export default function PlayerScreen({
   );
 
   useTVEventHandler((event: any) => {
-    const type =
-      event?.eventType || event?.direction || event?.keyAction || event?.eventKeyAction;
-
-    if (!type) {
+    const eventType = String(event?.eventType ?? '').toLowerCase();
+    if (!eventType) {
       return;
     }
-
-    const normalized = String(type).toLowerCase();
-
-    if (
-      normalized.includes('select') ||
-      normalized.includes('ok') ||
-      normalized.includes('enter')
-    ) {
-      if (!isPanelOpen) {
-        setIsPanelOpen(true);
-      }
-
+ 
+    if (eventType === 'select' || eventType === 'longselect') {
+      setIsPanelOpen(true);
       return;
     }
-
+ 
     if (isPanelOpen) {
       return;
     }
-
-    if (normalized.includes('up') || normalized.includes('right')) {
-      changeChannelByOffset(1);
-      return;
-    }
-
-    if (normalized.includes('down') || normalized.includes('left')) {
-      changeChannelByOffset(-1);
+ 
+    switch (eventType) {
+      case 'up':
+      case 'right':
+        changeChannelByOffset(1);
+        break;
+      case 'down':
+      case 'left':
+        changeChannelByOffset(-1);
+        break;
+      default:
+        break;
     }
   });
 
@@ -118,7 +112,14 @@ export default function PlayerScreen({
 
   return (
     <View style={styles.container}>
+        <Pressable
+        style={styles.focusCapture}
+        focusable={!isPanelOpen}
+        hasTVPreferredFocus={!isPanelOpen}
+        onPress={() => setIsPanelOpen(true)}
+      >
       <TVPlayer channel={channel} />
+      </Pressable>
 
       {isPanelOpen && (
         <View style={styles.panelOverlay}>
@@ -162,6 +163,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
     
+  },
+
+    focusCapture: {
+    flex: 1,
   },
 
   panelOverlay: {

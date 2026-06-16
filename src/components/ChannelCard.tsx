@@ -39,6 +39,7 @@ export default function ChannelCard({
             source={{ uri: channel.logo }}
             style={styles.logo}
             resizeMode="contain"
+            resizeMethod="resize" // El que quita el efecto serrucho
           />
         ) : (
           <Text style={styles.logoPlaceholder}>TV</Text>
@@ -57,10 +58,10 @@ export default function ChannelCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: 126,
+    width: 136,
     minWidth: 110,
-    maxWidth: 132,
-    height: 134,
+    maxWidth: 140,
+    height: 144,
     marginVertical: 6,
     marginHorizontal: 8,
     borderRadius: 14,
@@ -90,10 +91,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  logo: {
-    width: '90%',
-    height: 50,
-  },
+ logo: {
+  height: 70,          // Fijamos un alto un cachito más chico para que respire más limpio
+  aspectRatio: 1,      // Forzamos a que el componente sea un cuadrado perfecto (1:1)
+},
 
   logoPlaceholder: {
     color: '#999',

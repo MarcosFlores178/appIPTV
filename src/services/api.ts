@@ -1,17 +1,17 @@
-import { IPTVChannel } from '../types/iptv';
-
-const DEVELOPMENT_API_BASE_URL = 'http://192.168.1.130:4000';
-const PRODUCTION_API_BASE_URL = 'https://api.tu-dominio.com';
-
-export const API_BASE_URL = __DEV__
-  ? DEVELOPMENT_API_BASE_URL
-  : PRODUCTION_API_BASE_URL;
+import { DeviceSession, IPTVChannel } from '../types/iptv';
+import { getBackendBaseUrl } from './backendConfig';
 
 interface LoginResponse {
   token: string;
   expiresAt: string;
   user: {
     username: string;
+  };
+  device: {
+    deviceId: string;
+    deviceName: string;
+    manufacturer?: string;
+    model?: string;
   };
 }
 
@@ -24,16 +24,27 @@ export interface ChannelsResponse {
 export class ApiError extends Error {
   status: number;
   code?: string;
+  canceledReason?: string;
+  activeSessions?: DeviceSession[];
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    canceledReason?: string,
+    activeSessions?: DeviceSession[],
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.canceledReason = canceledReason;
+    this.activeSessions = activeSessions;
   }
 }
 
-const getApiUrl = (path: string) => `${API_BASE_URL}${path}`;
+export const getApiUrl = async (path: string): Promise<string> =>
+  `${await getBackendBaseUrl()}${path}`;
 
 const parseJsonResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({}));
@@ -45,8 +56,14 @@ const parseJsonResponse = async <T>(response: Response): Promise<T> => {
       typeof payload?.message === 'string'
         ? payload.message
         : 'No se pudo completar la solicitud.';
+    const canceledReason =
+      typeof payload?.canceledReason === 'string'
+        ? payload.canceledReason
+        : undefined;
+    const activeSessions =
+      Array.isArray(payload?.activeSessions) ? payload.activeSessions : undefined;
 
-    throw new ApiError(message, response.status, errorCode);
+    throw new ApiError(message, response.status, errorCode, canceledReason, activeSessions);
   }
 
   return payload as T;
@@ -57,13 +74,17 @@ export const login = async ({
   password,
   deviceId,
   deviceName,
+  manufacturer,
+  model,
 }: {
   username: string;
   password: string;
   deviceId: string;
   deviceName: string;
+  manufacturer?: string;
+  model?: string;
 }): Promise<LoginResponse> => {
-  const response = await fetch(getApiUrl('/auth/login'), {
+  const response = await fetch(await getApiUrl('/auth/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -73,6 +94,8 @@ export const login = async ({
       password,
       deviceId,
       deviceName,
+      ...(manufacturer && { manufacturer }),
+      ...(model && { model }),
     }),
   });
 
@@ -80,7 +103,7 @@ export const login = async ({
 };
 
 export const getCurrentSession = async (token: string): Promise<void> => {
-  const response = await fetch(getApiUrl('/auth/me'), {
+  const response = await fetch(await getApiUrl('/auth/me'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -90,7 +113,7 @@ export const getCurrentSession = async (token: string): Promise<void> => {
 };
 
 export const logout = async (token: string): Promise<void> => {
-  await fetch(getApiUrl('/auth/logout'), {
+  await fetch(await getApiUrl('/auth/logout'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -98,8 +121,49 @@ export const logout = async (token: string): Promise<void> => {
   }).catch(() => undefined);
 };
 
+export const revokeSession = async (
+  token: string,
+  sessionId: string,
+): Promise<void> => {
+  const response = await fetch(
+    await getApiUrl(`/auth/sessions/${sessionId}/revoke`),
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  await parseJsonResponse<{ ok: boolean }>(response);
+};
+
+export const revokeSessionWithCredentials = async ({
+  username,
+  password,
+  sessionId,
+}: {
+  username: string;
+  password: string;
+  sessionId: string;
+}): Promise<void> => {
+  const response = await fetch(await getApiUrl('/auth/revoke-session'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username,
+      password,
+      sessionId,
+    }),
+  });
+
+  await parseJsonResponse<{ ok: boolean }>(response);
+};
+
 export const getChannelsSnapshot = async (token: string): Promise<ChannelsResponse> => {
-  const response = await fetch(getApiUrl('/channels'), {
+  const response = await fetch(await getApiUrl('/channels'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },

@@ -1,5 +1,5 @@
 import { Alert, NativeModules, Platform } from 'react-native';
-import { API_BASE_URL, ApiError } from './api';
+import { ApiError, getApiUrl } from './api';
 
 interface AppVersionInfo {
   versionCode: number;
@@ -28,7 +28,7 @@ export const getCurrentAppVersionCode = async (): Promise<number> => {
 };
 
 export const fetchAppVersion = async (): Promise<AppVersionInfo> => {
-  const response = await fetch(`${API_BASE_URL}/api/app/version`, {
+  const response = await fetch(await getApiUrl('/api/app/version'), {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

@@ -85,6 +85,14 @@ export const clearAuthSession = async (): Promise<void> => {
   await AsyncStorage.removeItem(AUTH_SESSION_KEY);
 };
 
+export const clearLocalSessionData = async (): Promise<void> => {
+  await Promise.all([
+    AsyncStorage.removeItem(AUTH_SESSION_KEY),
+    AsyncStorage.removeItem(LAST_CHANNEL_KEY),
+    AsyncStorage.removeItem(FAVORITE_CHANNELS_KEY),
+  ]);
+};
+
 export const getOrCreateDeviceId = async (): Promise<string> => {
   const storedDeviceId = await AsyncStorage.getItem(DEVICE_ID_KEY);
 

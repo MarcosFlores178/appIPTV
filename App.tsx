@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
+  BackHandler,
   Platform,
   StatusBar,
   StyleSheet,
@@ -8,11 +9,10 @@ import {
   View,
   ActivityIndicator,
   Alert,
-  Pressable,
-  Text,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppSplashScreen from './src/components/AppSplashScreen';
+import SessionLimitModal from './src/components/SessionLimitModal';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import PlayerScreen from './src/screens/PlayerScreen';
@@ -22,7 +22,15 @@ import {
   getChannelsSnapshot,
   getCurrentSession,
   login,
+  logout,
+  revokeSessionWithCredentials,
 } from './src/services/api';
+import {
+  BackendConfigError,
+  DEFAULT_BACKEND_SERVER_INPUT,
+  getBackendServerInput,
+  saveBackendServerInput,
+} from './src/services/backendConfig';
 import {
   checkForAppUpdate,
   downloadAndInstallApk,
@@ -30,8 +38,10 @@ import {
   getCurrentAppVersionCode,
 } from './src/services/UpdateService';
 import { ChannelSortMode } from './src/services/channelService';
+import { getDeviceInfo } from './src/services/deviceInfo';
 import {
   clearAuthSession,
+  clearLocalSessionData,
   getAuthSession,
   getFavoriteChannelIds,
   getOrCreateDeviceId,
@@ -39,9 +49,13 @@ import {
   toggleFavoriteChannelId,
   StoredAuthSession,
 } from './src/services/storage';
-import { IPTVChannel } from './src/types/iptv';
+import { DeviceSession, IPTVChannel } from './src/types/iptv';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CHANNEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const CHANNEL_LOAD_MAX_ATTEMPTS = 3;
+const CHANNEL_LOAD_RETRY_DELAY_MS = 1200;
+const SESSION_STATUS_POLL_INTERVAL_MS = 10 * 1000;
 
 interface UpdateState {
   isChecking: boolean;
@@ -67,6 +81,15 @@ const MISSING_PLAYLIST_MESSAGE =
 const TEMPORARY_CHANNELS_MESSAGE =
   'No se pudieron cargar los canales. Intentá nuevamente.';
 const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Ingresá nuevamente.';
+const ADMIN_CLOSED_SESSION_MESSAGE = 'Sesión cerrada por el administrador';
+const ADMIN_CANCELED_ACCOUNT_MESSAGE =
+  'Cuenta cancelada por al administrador. Motivo:';
+
+const wait = (milliseconds: number) =>
+  new Promise<void>(resolve => setTimeout(() => resolve(), milliseconds));
+
+const getCanceledAccountMessage = (reason: string) =>
+  `${ADMIN_CANCELED_ACCOUNT_MESSAGE} ${reason.trim() || 'Sin motivo especificado'}`;
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -76,6 +99,9 @@ function App() {
   const [homeSelectedCategory, setHomeSelectedCategory] = useState('Todos');
   const [homeSortMode, setHomeSortMode] = useState<ChannelSortMode>('name');
   const [authSession, setAuthSession] = useState<StoredAuthSession | null>(null);
+  const [backendServerInput, setBackendServerInput] = useState(
+    DEFAULT_BACKEND_SERVER_INPUT,
+  );
   const [channels, setChannels] = useState<IPTVChannel[]>([]);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
@@ -90,7 +116,16 @@ function App() {
     isOptionalUpdateAvailable: false,
     updateError: null,
   });
+  const [sessionLimitModalVisible, setSessionLimitModalVisible] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<DeviceSession[]>([]);
+  const [pendingLoginCredentials, setPendingLoginCredentials] = useState<{
+    username: string;
+    password: string;
+    server: string;
+  } | null>(null);
+  const [isSessionRevoking, setIsSessionRevoking] = useState(false);
   const channelsUpdatedAtRef = useRef<string | null>(null);
+  const hasChannelsRef = useRef(false);
 
   const applyChannelsSnapshot = useCallback((snapshot: ChannelsResponse) => {
     if (channelsUpdatedAtRef.current === snapshot.updatedAt) {
@@ -98,6 +133,7 @@ function App() {
     }
 
     channelsUpdatedAtRef.current = snapshot.updatedAt;
+    hasChannelsRef.current = snapshot.channels.length > 0;
     setChannels(snapshot.channels);
     setActiveChannel(currentChannel => {
       if (!currentChannel) {
@@ -119,6 +155,11 @@ function App() {
     error.status === 404 &&
     error.code === 'PLAYLIST_NOT_FOUND';
 
+  const isCanceledAccountError = (error: unknown) =>
+    error instanceof ApiError &&
+    error.status === 403 &&
+    error.code === 'SERVICE_CANCELED';
+
   const expireSession = useCallback(async () => {
     await clearAuthSession();
     setAuthSession(null);
@@ -127,42 +168,87 @@ function App() {
     setLoginError(EXPIRED_SESSION_MESSAGE);
   }, []);
 
+  const closeSessionFromAdmin = useCallback(async () => {
+    await clearAuthSession();
+    setAuthSession(null);
+    setActiveChannel(null);
+    setChannels([]);
+    setFavoriteIds([]);
+    channelsUpdatedAtRef.current = null;
+    hasChannelsRef.current = false;
+    setChannelsLoadState({ status: 'idle', message: null });
+    setLoginError(ADMIN_CLOSED_SESSION_MESSAGE);
+  }, []);
+
+  const closeCanceledAccountFromAdmin = useCallback(async (reason: string) => {
+    await clearAuthSession();
+    setAuthSession(null);
+    setActiveChannel(null);
+    setChannels([]);
+    setFavoriteIds([]);
+    channelsUpdatedAtRef.current = null;
+    hasChannelsRef.current = false;
+    setChannelsLoadState({ status: 'idle', message: null });
+    setLoginError(getCanceledAccountMessage(reason));
+  }, []);
+
   const loadChannelsForToken = useCallback(
     async (
       token: string,
-      options: { showLoading?: boolean } = {},
+      options: {
+        attempts?: number;
+        preserveReadyOnTemporaryError?: boolean;
+        showLoading?: boolean;
+      } = {},
     ): Promise<boolean> => {
+      const maxAttempts = options.attempts || CHANNEL_LOAD_MAX_ATTEMPTS;
+
       if (options.showLoading !== false) {
         setChannelsLoadState({ status: 'loading', message: null });
       }
 
-      try {
-        const nextChannelsSnapshot = await getChannelsSnapshot(token);
-        applyChannelsSnapshot(nextChannelsSnapshot);
-        setChannelsLoadState({ status: 'ready', message: null });
-        return true;
-      } catch (error) {
-        if (isSessionError(error)) {
-          await expireSession();
-          return false;
-        }
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const nextChannelsSnapshot = await getChannelsSnapshot(token);
+          applyChannelsSnapshot(nextChannelsSnapshot);
+          setChannelsLoadState({ status: 'ready', message: null });
+          return true;
+        } catch (error) {
+          if (isSessionError(error)) {
+            await expireSession();
+            return false;
+          }
 
-        if (isPlaylistMissingError(error)) {
-          setChannels([]);
-          setActiveChannel(null);
+          if (isPlaylistMissingError(error)) {
+            hasChannelsRef.current = false;
+            setChannels([]);
+            setActiveChannel(null);
+            setChannelsLoadState({
+              status: 'missing_playlist',
+              message: MISSING_PLAYLIST_MESSAGE,
+            });
+            return false;
+          }
+
+          if (attempt < maxAttempts) {
+            await wait(CHANNEL_LOAD_RETRY_DELAY_MS);
+            continue;
+          }
+
+          if (options.preserveReadyOnTemporaryError || hasChannelsRef.current) {
+            setChannelsLoadState({ status: 'ready', message: null });
+            return false;
+          }
+
           setChannelsLoadState({
-            status: 'missing_playlist',
-            message: MISSING_PLAYLIST_MESSAGE,
+            status: 'temporary_error',
+            message: TEMPORARY_CHANNELS_MESSAGE,
           });
           return false;
         }
-
-        setChannelsLoadState({
-          status: 'temporary_error',
-          message: TEMPORARY_CHANNELS_MESSAGE,
-        });
-        return false;
       }
+
+      return false;
     },
     [applyChannelsSnapshot, expireSession],
   );
@@ -179,14 +265,17 @@ function App() {
       }
 
       // PASO 2: Luego hidratar datos de autenticación
-      const [storedAuthSession, favorites] = await Promise.all([
-        getAuthSession(),
-        getFavoriteChannelIds(),
-      ]);
+      const [storedAuthSession, favorites, storedBackendServerInput] =
+        await Promise.all([
+          getAuthSession(),
+          getFavoriteChannelIds(),
+          getBackendServerInput(),
+        ]);
 
+      setBackendServerInput(storedBackendServerInput);
       setFavoriteIds(favorites);
 
-      if (!storedAuthSession) {
+      if (!storedAuthSession || !storedBackendServerInput) {
         setIsAuthReady(true);
         return;
       }
@@ -262,8 +351,31 @@ function App() {
           }));
         }
         return true;
-      } else {
-        // UPDATE OPCIONAL: Mostrar en splash y permitir diferir
+    } else {
+        // UPDATE OPCIONAL: Mostrar alerta y permitir diferir
+        
+        // 1. Recuperamos el historial de "Más tarde"
+        const promptHistoryStr = await AsyncStorage.getItem('last_update_prompt');
+        const now = Date.now();
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+
+        if (promptHistoryStr) {
+          try {
+            const promptHistory = JSON.parse(promptHistoryStr);
+            const timePassed = now - promptHistory.timestamp;
+            
+            // Si NO pasaron 24hs Y ADEMÁS la versión es la misma que ya postergó
+            if (timePassed < twentyFourHours && promptHistory.version === remoteVersion.versionName) {
+              // Mantenemos el estado en false para no molestar
+              setUpdateState(prev => ({ ...prev, isChecking: false, isOptionalUpdateAvailable: false }));
+              return false;
+            }
+          } catch (e) {
+            // Si hay error al parsear (ej: quedó un string viejo del código anterior), lo ignoramos y mostramos el cartel
+          }
+        }
+
+        // 2. Si llegamos acá es porque: nunca se mostró, pasaron > 24hs, o es una VERSIÓN NUEVA
         setUpdateState(prev => ({
           ...prev,
           isOptionalUpdateAvailable: true,
@@ -293,6 +405,7 @@ function App() {
                   setUpdateState(prev => ({
                     ...prev,
                     isOptionalUpdateAvailable: false,
+                    isChecking: false,
                   }));
                   resolve();
                 },
@@ -300,11 +413,15 @@ function App() {
               {
                 text: 'Más tarde',
                 style: 'cancel',
-                onPress: () => {
-                  setUpdateState(prev => ({
-                    ...prev,
-                    isOptionalUpdateAvailable: false,
-                  }));
+                onPress: async () => {
+                  // 3. Guardamos el momento Y LA VERSIÓN que el usuario postergó
+                  const historyData = {
+                    timestamp: Date.now(),
+                    version: remoteVersion.versionName
+                  };
+                  await AsyncStorage.setItem('last_update_prompt', JSON.stringify(historyData));
+                  
+                  setUpdateState(prev => ({ ...prev, isOptionalUpdateAvailable: false }));
                   resolve();
                 },
               },
@@ -371,6 +488,7 @@ function App() {
   useEffect(() => {
     if (!authSession) {
       channelsUpdatedAtRef.current = null;
+      hasChannelsRef.current = false;
       setChannels([]);
       setChannelsLoadState({ status: 'idle', message: null });
       return;
@@ -381,7 +499,11 @@ function App() {
     const refreshChannels = async () => {
       try {
         if (isMounted) {
-          await loadChannelsForToken(authSession.token, { showLoading: false });
+          await loadChannelsForToken(authSession.token, {
+            attempts: 1,
+            preserveReadyOnTemporaryError: true,
+            showLoading: false,
+          });
         }
       } catch (error) {
         if (
@@ -417,12 +539,55 @@ function App() {
     };
   }, [authSession, loadChannelsForToken]);
 
+  useEffect(() => {
+    if (!authSession) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const checkSessionStatus = async () => {
+      try {
+        await getCurrentSession(authSession.token);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (isCanceledAccountError(error)) {
+          await closeCanceledAccountFromAdmin(
+            error instanceof ApiError ? error.canceledReason || '' : '',
+          );
+          return;
+        }
+
+        if (isSessionError(error)) {
+          await closeSessionFromAdmin();
+        }
+      }
+    };
+
+    const sessionStatusInterval = setInterval(
+      checkSessionStatus,
+      SESSION_STATUS_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      isMounted = false;
+      clearInterval(sessionStatusInterval);
+    };
+  }, [authSession, closeCanceledAccountFromAdmin, closeSessionFromAdmin]);
+
   const handleToggleFavorite = async (channel: IPTVChannel) => {
     const nextFavorites = await toggleFavoriteChannelId(channel.id);
     setFavoriteIds(nextFavorites);
   };
 
   const getLoginErrorMessage = (error: unknown) => {
+    if (error instanceof BackendConfigError) {
+      return error.message;
+    }
+
     if (error instanceof ApiError) {
       if (error.code === 'INVALID_CREDENTIALS') {
         return 'Usuario o contraseña incorrectos.';
@@ -432,23 +597,38 @@ function App() {
         return 'Este usuario ya está activo en otro dispositivo.';
       }
 
+      if (error.code === 'SERVICE_CANCELED') {
+        return getCanceledAccountMessage(error.canceledReason || '');
+      }
+
       return error.message;
     }
 
     return 'No se pudo conectar con el servidor.';
   };
 
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (
+    username: string,
+    password: string,
+    server: string,
+  ) => {
     setIsLoginLoading(true);
     setLoginError(null);
 
     try {
+      await saveBackendServerInput(server);
+      setBackendServerInput(server.trim());
+
       const deviceId = await getOrCreateDeviceId();
+      const deviceInfo = await getDeviceInfo();
+
       const response = await login({
         username,
         password,
         deviceId,
         deviceName: 'Android TV',
+        manufacturer: deviceInfo.manufacturer,
+        model: deviceInfo.model,
       });
       const nextAuthSession = {
         token: response.token,
@@ -461,10 +641,65 @@ function App() {
       setActiveChannel(null);
       await loadChannelsForToken(response.token);
     } catch (error) {
+      // Manejar error de límite de sesiones (409)
+      if (error instanceof ApiError && error.status === 409 && error.code === 'DEVICE_LIMIT_REACHED') {
+        if (error.activeSessions && error.activeSessions.length > 0) {
+          setActiveSessions(error.activeSessions);
+          setPendingLoginCredentials({ username, password, server });
+          setSessionLimitModalVisible(true);
+          return;
+        }
+      }
+
       setLoginError(getLoginErrorMessage(error));
     } finally {
       setIsLoginLoading(false);
     }
+  };
+
+  const handleRevokeAndRetryLogin = async (sessionId: string) => {
+    if (!pendingLoginCredentials || isSessionRevoking) {
+      return;
+    }
+
+    setIsSessionRevoking(true);
+
+    try {
+      // Revocar la sesión seleccionada usando credenciales directamente
+      await revokeSessionWithCredentials({
+        username: pendingLoginCredentials.username,
+        password: pendingLoginCredentials.password,
+        sessionId,
+      });
+
+      // Ahora intentar login nuevamente
+      setSessionLimitModalVisible(false);
+      setActiveSessions([]);
+      const credentialsToRetry = { ...pendingLoginCredentials };
+      setPendingLoginCredentials(null);
+
+      // Reintentar el login
+      await handleLogin(
+        credentialsToRetry.username,
+        credentialsToRetry.password,
+        credentialsToRetry.server,
+      );
+    } catch (error) {
+      console.error('Error al revocar sesión:', error);
+      setLoginError(
+        error instanceof ApiError
+          ? error.message
+          : 'Error al cerrar la sesión anterior.',
+      );
+    } finally {
+      setIsSessionRevoking(false);
+    }
+  };
+
+  const handleDismissSessionLimitModal = () => {
+    setSessionLimitModalVisible(false);
+    setActiveSessions([]);
+    setPendingLoginCredentials(null);
   };
 
   // Renderizar UI bloqueante si forceUpdate está activo
@@ -475,6 +710,29 @@ function App() {
 
     await loadChannelsForToken(authSession.token);
   };
+
+  const handleRequestExit = useCallback(
+    async (shouldLogout: boolean) => {
+      if (shouldLogout) {
+        const token = authSession?.token;
+
+        if (token) {
+          await logout(token);
+        }
+
+        await clearLocalSessionData();
+        setAuthSession(null);
+        setActiveChannel(null);
+        setChannels([]);
+        setFavoriteIds([]);
+        channelsUpdatedAtRef.current = null;
+        hasChannelsRef.current = false;
+      }
+
+      BackHandler.exitApp();
+    },
+    [authSession?.token],
+  );
 
   if (updateState.isForceUpdateRequired) {
     return (
@@ -522,81 +780,60 @@ function App() {
         )}
 
         {/* Mostrar login o contenido principal */}
-        {!showSplash && isAuthReady && !updateState.isChecking && (
-          <>
-            {!authSession ? (
-              <LoginScreen
-                errorMessage={loginError}
-                isLoading={isLoginLoading}
-                onLogin={handleLogin}
-              />
-            ) : channelsLoadState.status === 'missing_playlist' ||
-              channelsLoadState.status === 'temporary_error' ||
-              channelsLoadState.status === 'loading' ? (
-              <ChannelsUnavailableScreen
-                isLoading={channelsLoadState.status === 'loading'}
-                message={channelsLoadState.message || TEMPORARY_CHANNELS_MESSAGE}
-                onRetry={handleRetryChannels}
-              />
-            ) : activeChannel ? (
-              <PlayerScreen
-                channel={activeChannel}
-                channels={channels}
-                onBack={() => setActiveChannel(null)}
-                onChangeChannel={setActiveChannel}
-                isFavorite={favoriteIds.includes(activeChannel.id)}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            ) : (
-              <HomeScreen
-                channels={channels}
-                selectedCategory={homeSelectedCategory}
-                sortMode={homeSortMode}
-                onSelectCategory={setHomeSelectedCategory}
-                onSelectSortMode={setHomeSortMode}
-                onOpenChannel={setActiveChannel}
-              />
-            )}
-          </>
-        )}
+{!showSplash && isAuthReady && !updateState.isChecking && (
+  <>
+    {!authSession ? (
+      <LoginScreen
+        initialServer={backendServerInput}
+        errorMessage={loginError}
+        isLoading={isLoginLoading}
+        onLogin={handleLogin}
+      />
+    ) : activeChannel && channelsLoadState.status !== 'loading'? (
+      <PlayerScreen
+        channel={activeChannel}
+        channels={channels}
+        onBack={() => setActiveChannel(null)}
+        onChangeChannel={setActiveChannel}
+        isFavorite={favoriteIds.includes(activeChannel.id)}
+        onToggleFavorite={handleToggleFavorite}
+      />
+    ) : (
+      /* Siempre entramos al Home, pero inyectamos el estado de carga y error */
+      <HomeScreen
+        channels={channels}
+        channelsLoading={channelsLoadState.status === 'loading'}
+        channelsError={
+          channelsLoadState.status === 'missing_playlist' || 
+          channelsLoadState.status === 'temporary_error'
+            ? channelsLoadState.message || 'No hay lista de canales asignada.'
+            : null
+        }
+        onRetryChannels={handleRetryChannels} // Para que puedan reintentar desde el Home
+        selectedCategory={homeSelectedCategory}
+        sortMode={homeSortMode}
+        onSelectCategory={setHomeSelectedCategory}
+        onSelectSortMode={setHomeSortMode}
+        onOpenChannel={setActiveChannel}
+        onRequestExit={handleRequestExit}
+      />
+    )}
+  </>
+)}
+
+        {/* Modal de límite de sesiones */}
+        <SessionLimitModal
+          visible={sessionLimitModalVisible}
+          sessions={activeSessions}
+          isLoading={isSessionRevoking || isLoginLoading}
+          onSessionSelect={handleRevokeAndRetryLogin}
+          onDismiss={handleDismissSessionLimitModal}
+        />
       </View>
     </SafeAreaProvider>
   );
 }
 
-function ChannelsUnavailableScreen({
-  isLoading,
-  message,
-  onRetry,
-}: {
-  isLoading: boolean;
-  message: string;
-  onRetry: () => Promise<void>;
-}) {
-  return (
-    <View style={styles.channelsUnavailableContainer}>
-      <Text style={styles.channelsUnavailableTitle}>Canales no disponibles</Text>
-      <Text style={styles.channelsUnavailableMessage}>{message}</Text>
-      <Pressable
-        onPress={() => onRetry().catch(() => undefined)}
-        disabled={isLoading}
-        hasTVPreferredFocus
-        style={({ pressed, focused }) => [
-          styles.retryButton,
-          focused && styles.retryButtonFocused,
-          pressed && styles.retryButtonPressed,
-          isLoading && styles.retryButtonDisabled,
-        ]}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#111" />
-        ) : (
-          <Text style={styles.retryButtonText}>Reintentar</Text>
-        )}
-      </Pressable>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: {
@@ -609,8 +846,7 @@ const styles = StyleSheet.create({
   },
   splashContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#050505',
   },
   loaderMargin: {
     marginBottom: 20,
