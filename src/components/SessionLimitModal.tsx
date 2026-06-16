@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   },
 
   sessionItemSelected: {
-    borderColor: '#ff7a1a',
+    borderColor:'#0082c5' ,
     backgroundColor: 'rgba(255, 122, 26, 0.1)',
   },
 
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#ff7a1a',
+    backgroundColor: '#5a678d22',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 16,
@@ -283,13 +283,13 @@ const styles = StyleSheet.create({
   },
 
   revokeButton: {
-    backgroundColor: '#ff7a1a',
-    borderColor: '#ff7a1a',
+    backgroundColor: '#5a678d22',
+    borderColor: '#0082c5',
   },
 
   cancelButton: {
     backgroundColor: 'transparent',
-    borderColor: '#555',
+    borderColor: '#0082c5',
   },
 
   buttonText: {
