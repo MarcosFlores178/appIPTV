@@ -230,21 +230,34 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.02 }],
   },
 
-  quickButtonActive: {
-    backgroundColor: '#ff7a1a22',
-    borderColor: '#ff7a1a',
-  },
+  // quickButtonActive: {
+  //   backgroundColor: '#ff7a1a22',
+  //   borderColor: '#ff7a1a',
+  // },
 
-  quickButtonText: {
-    color: '#aaa',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  // quickButtonText: {
+  //   color: '#aaa',
+  //   fontSize: 14,
+  //   fontWeight: '600',
+  // },
 
-  quickButtonTextActive: {
-    color: '#ff7a1a',
-  },
+  // quickButtonTextActive: {
+  //   color: '#ff7a1a',
+  // },
 
+// Opción 2: Combinación mixta
+quickButtonActive: {
+  backgroundColor: '#9cd36922',
+  borderColor: '#0082c5',
+},
+quickButtonText: {
+  color: '#aaa',  // Neutro
+  fontSize: 14,
+  fontWeight: '600',
+},
+quickButtonTextActive: {
+  color:'#0082c5',
+},
   input: {
     minHeight: 56,
     borderRadius: 8,

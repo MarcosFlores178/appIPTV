@@ -703,31 +703,32 @@ centerMessageContainer: {
   },
 
   exitButton: {
-    backgroundColor: '#2b2b2b',
-    borderColor: '#4a4a4a',
-  },
+  backgroundColor: '#9cd36922',
+  borderColor: '#0082c5',          // Verde como borde de contraste
+},
 
-  cancelButton: {
-    backgroundColor: '#f0f0f0',
-    borderColor: '#f0f0f0',
-  },
+cancelButton: {
+  backgroundColor: '#9cd36922',
+  borderColor: '#0082c5',          // Verde sólido para el borde
+},
 
-  exitDialogButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '800',
-  },
+exitDialogButtonText: {
+  color: '#aaa',                // Blanco (se permite porque es texto sobre azul)
+  fontSize: 17,
+  fontWeight: '800',
+},
 
-  cancelButtonText: {
-    color: '#111',
-    fontSize: 17,
-    fontWeight: '800',
-  },
+cancelButtonText: {
+  color: '#aaa',               // Azul para el texto del botón cancelar
+  fontSize: 17,
+  fontWeight: '800',
+},
 
-  dialogControlFocused: {
-    borderColor: '#ffffff',
-    transform: [{ scale: 1.04 }],
-  },
+dialogControlFocused: {
+  borderColor: '#fff',
+    backgroundColor: '#222',
+    transform: [{ scale: 1.02 }],
+},
 
   dialogControlPressed: {
     opacity: 0.86,

@@ -50,6 +50,7 @@ import {
   StoredAuthSession,
 } from './src/services/storage';
 import { DeviceSession, IPTVChannel } from './src/types/iptv';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CHANNEL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const CHANNEL_LOAD_MAX_ATTEMPTS = 3;
@@ -350,8 +351,31 @@ function App() {
           }));
         }
         return true;
-      } else {
-        // UPDATE OPCIONAL: Mostrar en splash y permitir diferir
+    } else {
+        // UPDATE OPCIONAL: Mostrar alerta y permitir diferir
+        
+        // 1. Recuperamos el historial de "Más tarde"
+        const promptHistoryStr = await AsyncStorage.getItem('last_update_prompt');
+        const now = Date.now();
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+
+        if (promptHistoryStr) {
+          try {
+            const promptHistory = JSON.parse(promptHistoryStr);
+            const timePassed = now - promptHistory.timestamp;
+            
+            // Si NO pasaron 24hs Y ADEMÁS la versión es la misma que ya postergó
+            if (timePassed < twentyFourHours && promptHistory.version === remoteVersion.versionName) {
+              // Mantenemos el estado en false para no molestar
+              setUpdateState(prev => ({ ...prev, isChecking: false, isOptionalUpdateAvailable: false }));
+              return false;
+            }
+          } catch (e) {
+            // Si hay error al parsear (ej: quedó un string viejo del código anterior), lo ignoramos y mostramos el cartel
+          }
+        }
+
+        // 2. Si llegamos acá es porque: nunca se mostró, pasaron > 24hs, o es una VERSIÓN NUEVA
         setUpdateState(prev => ({
           ...prev,
           isOptionalUpdateAvailable: true,
@@ -381,6 +405,7 @@ function App() {
                   setUpdateState(prev => ({
                     ...prev,
                     isOptionalUpdateAvailable: false,
+                    isChecking: false,
                   }));
                   resolve();
                 },
@@ -388,11 +413,15 @@ function App() {
               {
                 text: 'Más tarde',
                 style: 'cancel',
-                onPress: () => {
-                  setUpdateState(prev => ({
-                    ...prev,
-                    isOptionalUpdateAvailable: false,
-                  }));
+                onPress: async () => {
+                  // 3. Guardamos el momento Y LA VERSIÓN que el usuario postergó
+                  const historyData = {
+                    timestamp: Date.now(),
+                    version: remoteVersion.versionName
+                  };
+                  await AsyncStorage.setItem('last_update_prompt', JSON.stringify(historyData));
+                  
+                  setUpdateState(prev => ({ ...prev, isOptionalUpdateAvailable: false }));
                   resolve();
                 },
               },
@@ -760,7 +789,7 @@ function App() {
         isLoading={isLoginLoading}
         onLogin={handleLogin}
       />
-    ) : activeChannel ? (
+    ) : activeChannel && channelsLoadState.status !== 'loading'? (
       <PlayerScreen
         channel={activeChannel}
         channels={channels}

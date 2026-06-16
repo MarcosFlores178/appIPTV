@@ -8,7 +8,7 @@ interface TVPlayerProps {
 }
 
 export default function TVPlayer({ channel }: TVPlayerProps) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showChannelName, setShowChannelName] = useState(false);
@@ -21,7 +21,6 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const maxRetries = 5;
 
   useEffect(() => {
-    setIsLoading(true);
     setIsBuffering(false);
     setErrorMessage(null);
     setShowChannelName(false);
@@ -105,26 +104,27 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
             },
             bufferConfig: {
-              minBufferMs: 25000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 3000,
+              minBufferMs: 15000,
+              maxBufferMs: 30000,
+              bufferForPlaybackMs: 500,
               bufferForPlaybackAfterRebufferMs: 5000,
             },
           }}
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
           controls={false}
+          focusable={false} 
           paused={false}
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
           onLoadStart={() => {
-            setIsLoading(true);
-            setIsBuffering(false); // 🚀 Resetear el buffer fantasma al iniciar el zap
+            setIsInitialLoad(true);
+            // setIsBuffering(false); // 🚀 Resetear el buffer fantasma al iniciar el zap
             setErrorMessage(null);
           }}
           onLoad={() => {
-            setIsLoading(false);
+            setIsInitialLoad(false); // Ya cargó, el video está listo
             setHasPlaybackStarted(true);
           }}
           onReadyForDisplay={() => {
@@ -144,7 +144,6 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               
               console.log(`Playback error, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`);
               
-              setIsLoading(true);
               setRetryCount(nextRetry);
               
               if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
@@ -156,7 +155,6 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               return;
             }
 
-            setIsLoading(false);
             setIsBuffering(false);
             setErrorMessage(
               event.error.errorString ||
@@ -166,8 +164,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           }}
         />
 
-        {(isLoading || isBuffering || errorMessage) && (
-          <View style={styles.statusOverlay}>
+        {/* Solo mostramos el overlay si hay error o si se quedó sin buffer (isBuffering nativo) */}
+        {(isInitialLoad || isBuffering || errorMessage) && (
+          <View style={styles.statusOverlay} pointerEvents="none"> 
             {errorMessage ? (
               <>
                 <Text style={styles.errorTitle}>No se pudo abrir el canal</Text>
@@ -176,13 +175,13 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
             ) : (
               <>
                 <ActivityIndicator size="large" color="#ffffff" />
-                <Text style={styles.statusText}>
-                  {retryCount > 0
-                  ? `Reconectando... (intento ${retryCount}/${maxRetries})`
-                  : isLoading
-                    ? 'Cargando stream...'
-                    : 'Buffering del stream...'}
-                </Text>
+                
+        {/* Solo mostramos texto si el reproductor está en ciclo de reintento activo */}
+        {retryCount > 0 && (
+          <Text style={styles.statusText}>
+            Reconectando... ({retryCount}/{maxRetries})
+          </Text>
+        )}
               </>
             )}
           </View>
