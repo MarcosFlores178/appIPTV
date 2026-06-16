@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   useTVEventHandler,
@@ -112,7 +113,14 @@ export default function PlayerScreen({
 
   return (
     <View style={styles.container}>
-      <TVPlayer channel={channel} />
+      <Pressable
+        style={styles.focusCapture}
+        focusable={!isPanelOpen}
+        hasTVPreferredFocus={!isPanelOpen}
+        onPress={() => setIsPanelOpen(true)}
+      >
+        <TVPlayer channel={channel} />
+      </Pressable>
 
       {isPanelOpen && (
         <View style={styles.panelOverlay}>
@@ -156,6 +164,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
     
+  },
+
+  focusCapture: {
+    flex: 1,
   },
 
   panelOverlay: {
