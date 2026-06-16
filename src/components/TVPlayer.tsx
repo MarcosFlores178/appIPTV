@@ -38,6 +38,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
           controls={false}
+          focusable={false}
           paused={false}
           playInBackground={false}
           playWhenInactive={false}

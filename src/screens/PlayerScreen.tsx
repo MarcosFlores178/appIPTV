@@ -56,24 +56,14 @@ export default function PlayerScreen({
   );
 
   useTVEventHandler((event: any) => {
-    const type =
-      event?.eventType || event?.direction || event?.keyAction || event?.eventKeyAction;
+    const eventType = String(event?.eventType ?? '').toLowerCase();
 
-    if (!type) {
+    if (!eventType) {
       return;
     }
 
-    const normalized = String(type).toLowerCase();
-
-    if (
-      normalized.includes('select') ||
-      normalized.includes('ok') ||
-      normalized.includes('enter')
-    ) {
-      if (!isPanelOpen) {
-        setIsPanelOpen(true);
-      }
-
+    if (eventType === 'select' || eventType === 'longselect') {
+      setIsPanelOpen(true);
       return;
     }
 
@@ -81,13 +71,17 @@ export default function PlayerScreen({
       return;
     }
 
-    if (normalized.includes('up') || normalized.includes('right')) {
-      changeChannelByOffset(1);
-      return;
-    }
-
-    if (normalized.includes('down') || normalized.includes('left')) {
-      changeChannelByOffset(-1);
+    switch (eventType) {
+      case 'up':
+      case 'right':
+        changeChannelByOffset(1);
+        break;
+      case 'down':
+      case 'left':
+        changeChannelByOffset(-1);
+        break;
+      default:
+        break;
     }
   });
 
