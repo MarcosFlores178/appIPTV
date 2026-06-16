@@ -703,12 +703,12 @@ centerMessageContainer: {
   },
 
   exitButton: {
-  backgroundColor: '#9cd36922',
+  backgroundColor: '#5a678d22',
   borderColor: '#0082c5',          // Verde como borde de contraste
 },
 
 cancelButton: {
-  backgroundColor: '#9cd36922',
+  backgroundColor: '#5a678d22',
   borderColor: '#0082c5',          // Verde sólido para el borde
 },
 
@@ -725,9 +725,9 @@ cancelButtonText: {
 },
 
 dialogControlFocused: {
-  borderColor: '#fff',
+  borderColor: '#0082c5',
     backgroundColor: '#222',
-    transform: [{ scale: 1.02 }],
+    transform: [{ scale: 1.04 }],
 },
 
   dialogControlPressed: {
