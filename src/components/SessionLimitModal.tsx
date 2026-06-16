@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -34,6 +34,17 @@ export default function SessionLimitModal({
   const sessionListRef = useRef<FlatList>(null);
   const firstSessionRef = useRef<any>(null);
 
+  useEffect(() => {
+    if (!visible || sessions.length === 0) {
+      setSelectedSessionId(null);
+      return;
+    }
+
+    setSelectedSessionId(prev =>
+      prev && sessions.some(session => session.id === prev) ? prev : sessions[0].id,
+    );
+  }, [visible, sessions]);
+
   const formatDate = (isoString: string): string => {
     try {
       const date = new Date(isoString);
@@ -57,8 +68,6 @@ export default function SessionLimitModal({
     setIsRevoking(true);
     try {
       await onSessionSelect(selectedSessionId);
-      setSelectedSessionId(null);
-      onDismiss();
     } finally {
       setIsRevoking(false);
     }
@@ -75,6 +84,7 @@ export default function SessionLimitModal({
     return (
       <Pressable
         ref={isFirst ? firstSessionRef : undefined}
+        hasTVPreferredFocus={isFirst}
         onPress={() => handleSessionFocus(item.id)}
         onFocus={() => handleSessionFocus(item.id)}
         style={({ focused }) => [
