@@ -370,7 +370,7 @@ function App() {
               setUpdateState(prev => ({ ...prev, isChecking: false, isOptionalUpdateAvailable: false }));
               return false;
             }
-          } catch (e) {
+          } catch {
             // Si hay error al parsear (ej: quedó un string viejo del código anterior), lo ignoramos y mostramos el cartel
           }
         }
@@ -621,12 +621,17 @@ function App() {
 
       const deviceId = await getOrCreateDeviceId();
       const deviceInfo = await getDeviceInfo();
+      const deviceName =
+        [deviceInfo.manufacturer, deviceInfo.model]
+          .map(part => part.trim())
+          .filter(part => part && part !== 'Unknown')
+          .join(' ') || 'Android TV';
 
       const response = await login({
         username,
         password,
         deviceId,
-        deviceName: 'Android TV',
+        deviceName,
         manufacturer: deviceInfo.manufacturer,
         model: deviceInfo.model,
       });
