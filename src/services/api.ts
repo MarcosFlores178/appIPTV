@@ -46,6 +46,38 @@ export class ApiError extends Error {
 export const getApiUrl = async (path: string): Promise<string> =>
   `${await getBackendBaseUrl()}${path}`;
 
+// Helper fetch con timeout usando AbortController
+const fetchWithTimeout = async (
+  input: RequestInfo,
+  init?: RequestInit,
+  timeoutMs = 10000,
+): Promise<Response> => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const mergedInit = { ...(init || {}), signal: controller.signal } as RequestInit;
+    const res = await fetch(input, mergedInit);
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+};
+
+// Mejorar errores de red: convertir aborts y fallos de fetch en ApiError
+const safeFetch = async (input: RequestInfo, init?: RequestInit, timeoutMs = 10000) => {
+  try {
+    return await fetchWithTimeout(input, init, timeoutMs);
+  } catch (err: any) {
+    if (err && err.name === 'AbortError') {
+      throw new ApiError('Tiempo de espera de la conexión agotado.', 0, 'REQUEST_TIMEOUT');
+    }
+
+    // Error de red no HTTP (DNS, unreachable, network down)
+    const message = err instanceof Error ? err.message : 'Error de red';
+    throw new ApiError(message, 0, 'NETWORK_ERROR');
+  }
+};
+
 const parseJsonResponse = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({}));
 
@@ -84,7 +116,7 @@ export const login = async ({
   manufacturer?: string;
   model?: string;
 }): Promise<LoginResponse> => {
-  const response = await fetch(await getApiUrl('/auth/login'), {
+  const response = await safeFetch(await getApiUrl('/auth/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -97,35 +129,35 @@ export const login = async ({
       ...(manufacturer && { manufacturer }),
       ...(model && { model }),
     }),
-  });
+  }, 10000);
 
   return parseJsonResponse<LoginResponse>(response);
 };
 
 export const getCurrentSession = async (token: string): Promise<void> => {
-  const response = await fetch(await getApiUrl('/auth/me'), {
+  const response = await safeFetch(await getApiUrl('/auth/me'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, 8000);
 
   await parseJsonResponse(response);
 };
 
 export const logout = async (token: string): Promise<void> => {
-  await fetch(await getApiUrl('/auth/logout'), {
+  await safeFetch(await getApiUrl('/auth/logout'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  }).catch(() => undefined);
+  }, 5000).catch(() => undefined);
 };
 
 export const revokeSession = async (
   token: string,
   sessionId: string,
 ): Promise<void> => {
-  const response = await fetch(
+  const response = await safeFetch(
     await getApiUrl(`/auth/sessions/${sessionId}/revoke`),
     {
       method: 'POST',
@@ -133,6 +165,7 @@ export const revokeSession = async (
         Authorization: `Bearer ${token}`,
       },
     },
+    8000,
   );
 
   await parseJsonResponse<{ ok: boolean }>(response);
@@ -147,7 +180,7 @@ export const revokeSessionWithCredentials = async ({
   password: string;
   sessionId: string;
 }): Promise<void> => {
-  const response = await fetch(await getApiUrl('/auth/revoke-session'), {
+  const response = await safeFetch(await getApiUrl('/auth/revoke-session'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -157,17 +190,17 @@ export const revokeSessionWithCredentials = async ({
       password,
       sessionId,
     }),
-  });
+  }, 10000);
 
   await parseJsonResponse<{ ok: boolean }>(response);
 };
 
 export const getChannelsSnapshot = async (token: string): Promise<ChannelsResponse> => {
-  const response = await fetch(await getApiUrl('/channels'), {
+  const response = await safeFetch(await getApiUrl('/channels'), {
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, 12000);
 
   return parseJsonResponse<ChannelsResponse>(response);
 };

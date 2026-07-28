@@ -33,9 +33,7 @@ export const fetchAppVersion = async (): Promise<AppVersionInfo> => {
     headers: {
       'Content-Type': 'application/json',
     },
-    // Agregar timeout para evitar espera indefinida
-    // AbortSignal.timeout está disponible en entornos modernos de JS/React Native
-    signal: (AbortSignal as any).timeout ? AbortSignal.timeout(8000) : undefined, // 8s
+    signal: AbortSignal.timeout(8000), // ✅ TIMEOUT DE 8 SEGUNDOS AGREGADO
   });
 
   if (!response.ok) {
@@ -101,8 +99,8 @@ export const checkForAppUpdate = async (): Promise<void> => {
       return;
     }
 
-    // Manejo explícito de timeout/abort
-    if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+    // ✅ MANEJO DE TIMEOUT AGREGADO
+    if (error instanceof Error && error.name === 'AbortError') {
       console.warn('Timeout al verificar versión de app');
       return;
     }

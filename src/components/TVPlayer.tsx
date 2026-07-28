@@ -11,6 +11,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [startupTimeoutMessage, setStartupTimeoutMessage] = useState<string | null>(null);
   const [showChannelName, setShowChannelName] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -18,7 +19,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   
   const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxRetries = 5;
+  const START_READY_TIMEOUT_MS = 20000;
 
   useEffect(() => {
     setIsBuffering(false);
@@ -35,6 +38,10 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
+      }
+      if (readyTimeoutRef.current) {
+        clearTimeout(readyTimeoutRef.current);
+        readyTimeoutRef.current = null;
       }
     };
 
@@ -104,10 +111,10 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
             },
             bufferConfig: {
-              minBufferMs: 15000,
-              maxBufferMs: 30000,
-              bufferForPlaybackMs: 500,
-              bufferForPlaybackAfterRebufferMs: 5000,
+              minBufferMs: 26000,
+              maxBufferMs: 34000,
+              bufferForPlaybackMs: 2000,
+              bufferForPlaybackAfterRebufferMs: 8000,
             },
           }}
           style={styles.video}
@@ -120,8 +127,19 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           ignoreSilentSwitch="ignore"
           onLoadStart={() => {
             setIsInitialLoad(true);
-            // setIsBuffering(false); // 🚀 Resetear el buffer fantasma al iniciar el zap
             setErrorMessage(null);
+            setStartupTimeoutMessage(null);
+
+            if (readyTimeoutRef.current) {
+              clearTimeout(readyTimeoutRef.current);
+            }
+
+            readyTimeoutRef.current = setTimeout(() => {
+              console.log('Playback start timeout: reiniciando stream para desbloquear reproductor');
+              setStartupTimeoutMessage('Reintentando canal por falta de respuesta desde el servidor.');
+              setPlayerKey(prev => prev + 1);
+              readyTimeoutRef.current = null;
+            }, START_READY_TIMEOUT_MS);
           }}
           onLoad={() => {
             setIsInitialLoad(false); // Ya cargó, el video está listo
@@ -130,14 +148,24 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           onReadyForDisplay={() => {
             // El primer frame del video ya es visible en la TV
             setRetryCount(0);
+            setStartupTimeoutMessage(null);
             setIsBuffering(false); // 🚀 Forzar el apagado por si el evento nativo falló
             if (retryTimerRef.current) {
               clearTimeout(retryTimerRef.current);
               retryTimerRef.current = null;
             }
+            if (readyTimeoutRef.current) {
+              clearTimeout(readyTimeoutRef.current);
+              readyTimeoutRef.current = null;
+            }
           }}
           onBuffer={handleBuffer}
           onError={event => {
+            if (readyTimeoutRef.current) {
+              clearTimeout(readyTimeoutRef.current);
+              readyTimeoutRef.current = null;
+            }
+
             if (retryCount < maxRetries) {
               const nextRetry = retryCount + 1;
               const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
@@ -157,15 +185,15 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
 
             setIsBuffering(false);
             setErrorMessage(
-              event.error.errorString ||
-                event.error.localizedDescription ||
-                'No se pudo reproducir este stream.',
+              event.error?.errorString ||
+              event.error?.localizedDescription ||
+              'No se pudo reproducir este stream.',
             );
           }}
         />
 
         {/* Solo mostramos el overlay si hay error o si se quedó sin buffer (isBuffering nativo) */}
-        {(isInitialLoad || isBuffering || errorMessage) && (
+        {(isInitialLoad || isBuffering || errorMessage || startupTimeoutMessage) && (
           <View style={styles.statusOverlay} pointerEvents="none"> 
             {errorMessage ? (
               <>
@@ -175,13 +203,15 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
             ) : (
               <>
                 <ActivityIndicator size="large" color="#ffffff" />
-                
-        {/* Solo mostramos texto si el reproductor está en ciclo de reintento activo */}
-        {retryCount > 0 && (
-          <Text style={styles.statusText}>
-            Reconectando... ({retryCount}/{maxRetries})
-          </Text>
-        )}
+                {startupTimeoutMessage ? (
+                  <Text style={styles.statusText}>{startupTimeoutMessage}</Text>
+                ) : (
+                  retryCount > 0 && (
+                    <Text style={styles.statusText}>
+                      Reconectando... ({retryCount}/{maxRetries})
+                    </Text>
+                  )
+                )}
               </>
             )}
           </View>

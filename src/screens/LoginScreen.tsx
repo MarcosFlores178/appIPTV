@@ -225,39 +225,25 @@ const styles = StyleSheet.create({
   },
 
   quickButtonFocused: {
-    borderColor: '#fff',
-    backgroundColor: '#222',
-    transform: [{ scale: 1.02 }],
+    borderColor: '#ffffff',
+    backgroundColor: '#1f3e58',
+    transform: [{ scale: 1.03 }],
   },
 
-  // quickButtonActive: {
-  //   backgroundColor: '#ff7a1a22',
-  //   borderColor: '#ff7a1a',
-  // },
+  quickButtonActive: {
+    backgroundColor: 'rgba(0, 130, 197, 0.18)',
+    borderColor: '#0082c5',
+  },
 
-  // quickButtonText: {
-  //   color: '#aaa',
-  //   fontSize: 14,
-  //   fontWeight: '600',
-  // },
+  quickButtonText: {
+    color: '#aaa',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
-  // quickButtonTextActive: {
-  //   color: '#ff7a1a',
-  // },
-
-// Opción 2: Combinación mixta
-quickButtonActive: {
-  backgroundColor: '#9cd36922',
-  borderColor: '#0082c5',
-},
-quickButtonText: {
-  color: '#aaa',  // Neutro
-  fontSize: 14,
-  fontWeight: '600',
-},
-quickButtonTextActive: {
-  color:'#0082c5',
-},
+  quickButtonTextActive: {
+    color: '#ffffff',
+  },
   input: {
     minHeight: 56,
     borderRadius: 8,
@@ -279,20 +265,21 @@ quickButtonTextActive: {
   loginButton: {
     minHeight: 56,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#0082c5',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#f0f0f0',
+    borderColor: '#0082c5',
   },
 
   loginButtonFocused: {
     borderColor: '#ffffff',
+    backgroundColor: '#0d6c98',
     transform: [{ scale: 1.04 }],
   },
 
   loginButtonPressed: {
-    opacity: 0.86,
+    opacity: 0.9,
   },
 
   loginButtonDisabled: {
@@ -300,7 +287,7 @@ quickButtonTextActive: {
   },
 
   loginButtonText: {
-    color: '#111',
+    color: '#ffffff',
     fontSize: 17,
     fontWeight: '800',
   },

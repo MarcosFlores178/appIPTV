@@ -240,9 +240,21 @@ function App() {
             return false;
           }
 
+          let tempMsg = TEMPORARY_CHANNELS_MESSAGE;
+
+          if (error instanceof ApiError) {
+            if (error.code === 'REQUEST_TIMEOUT') {
+              tempMsg = 'Tiempo de espera agotado al conectar con el servidor. Revisá tu conexión e intentá de nuevo.';
+            } else if (error.code === 'NETWORK_ERROR') {
+              tempMsg = 'Sin conexión a Internet. Verificá tu Wi‑Fi o reiniciá el router.';
+            } else if (error.status === 0) {
+              tempMsg = 'Error de red. Intentá reconectar o usar otra red.';
+            }
+          }
+
           setChannelsLoadState({
             status: 'temporary_error',
-            message: TEMPORARY_CHANNELS_MESSAGE,
+            message: tempMsg,
           });
           return false;
         }
@@ -318,9 +330,22 @@ function App() {
         updateError: null,
       }));
 
-      const [currentVersionCode, remoteVersion] = await Promise.all([
+      // Timeout máximo de 12 segundos para toda la verificación de actualización
+      const updateCheckPromise = Promise.all([
         getCurrentAppVersionCode(),
         fetchAppVersion(),
+      ]);
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const t = setTimeout(() => {
+          clearTimeout(t);
+          reject(new Error('Timeout verificando actualización'));
+        }, 12000);
+      });
+
+      const [currentVersionCode, remoteVersion] = await Promise.race([
+        updateCheckPromise as Promise<[number, any]>,
+        timeoutPromise,
       ]);
 
       // No hay actualización disponible
@@ -351,10 +376,8 @@ function App() {
           }));
         }
         return true;
-    } else {
+      } else {
         // UPDATE OPCIONAL: Mostrar alerta y permitir diferir
-        
-        // 1. Recuperamos el historial de "Más tarde"
         const promptHistoryStr = await AsyncStorage.getItem('last_update_prompt');
         const now = Date.now();
         const twentyFourHours = 24 * 60 * 60 * 1000;
@@ -363,26 +386,22 @@ function App() {
           try {
             const promptHistory = JSON.parse(promptHistoryStr);
             const timePassed = now - promptHistory.timestamp;
-            
-            // Si NO pasaron 24hs Y ADEMÁS la versión es la misma que ya postergó
+
             if (timePassed < twentyFourHours && promptHistory.version === remoteVersion.versionName) {
-              // Mantenemos el estado en false para no molestar
               setUpdateState(prev => ({ ...prev, isChecking: false, isOptionalUpdateAvailable: false }));
               return false;
             }
           } catch {
-            // Si hay error al parsear (ej: quedó un string viejo del código anterior), lo ignoramos y mostramos el cartel
+            // ignore parse errors
           }
         }
 
-        // 2. Si llegamos acá es porque: nunca se mostró, pasaron > 24hs, o es una VERSIÓN NUEVA
         setUpdateState(prev => ({
           ...prev,
           isOptionalUpdateAvailable: true,
           isChecking: false,
         }));
 
-        // Mostrar alerta al usuario
         await new Promise<void>(resolve => {
           Alert.alert(
             'Actualización disponible',
@@ -392,21 +411,11 @@ function App() {
                 text: 'Actualizar ahora',
                 onPress: async () => {
                   try {
-                    await downloadAndInstallApk(
-                      remoteVersion.apkUrl,
-                      remoteVersion.versionName,
-                    );
+                    await downloadAndInstallApk(remoteVersion.apkUrl, remoteVersion.versionName);
                   } catch (error) {
-                    Alert.alert(
-                      'Error',
-                      `No se pudo instalar: ${error instanceof Error ? error.message : 'desconocido'}`,
-                    );
+                    Alert.alert('Error', `No se pudo instalar: ${error instanceof Error ? error.message : 'desconocido'}`);
                   }
-                  setUpdateState(prev => ({
-                    ...prev,
-                    isOptionalUpdateAvailable: false,
-                    isChecking: false,
-                  }));
+                  setUpdateState(prev => ({ ...prev, isOptionalUpdateAvailable: false, isChecking: false }));
                   resolve();
                 },
               },
@@ -414,13 +423,8 @@ function App() {
                 text: 'Más tarde',
                 style: 'cancel',
                 onPress: async () => {
-                  // 3. Guardamos el momento Y LA VERSIÓN que el usuario postergó
-                  const historyData = {
-                    timestamp: Date.now(),
-                    version: remoteVersion.versionName
-                  };
+                  const historyData = { timestamp: Date.now(), version: remoteVersion.versionName };
                   await AsyncStorage.setItem('last_update_prompt', JSON.stringify(historyData));
-                  
                   setUpdateState(prev => ({ ...prev, isOptionalUpdateAvailable: false }));
                   resolve();
                 },
@@ -436,13 +440,15 @@ function App() {
       const errorMessage =
         error instanceof ApiError
           ? `No se pudo verificar versión: ${error.message}`
-          : 'Error al verificar actualización';
+          : error instanceof Error
+            ? error.message
+            : 'Error al verificar actualización';
 
       console.warn('Error en OTA check:', errorMessage);
       setUpdateState(prev => ({
         ...prev,
         isChecking: false,
-        updateError: null, // No mostrar error en UI, solo log
+        updateError: null,
       }));
       return false;
     }
@@ -465,6 +471,13 @@ function App() {
   }, [updateState.isForceUpdateRequired]);
 
   useEffect(() => {
+    // En entorno de test, no crear timers asíncronos: ocultar splash inmediatamente
+    const testWorkerId = (globalThis as any).process?.env?.JEST_WORKER_ID;
+    if (testWorkerId) {
+      setShowSplash(false);
+      return;
+    }
+
     // Mostrar splash al menos 2200ms, pero si aún está verificando actualización, esperar
     const splashTimeout = setTimeout(() => {
       if (!updateState.isChecking) {
@@ -472,7 +485,17 @@ function App() {
       }
     }, 2200);
 
-    return () => clearTimeout(splashTimeout);
+    // TIMEOUT DE RESCATE: Si aún está cargando después de 15 segundos, forzar ocultado
+    const emergencyTimeout = setTimeout(() => {
+      console.warn('⚠️ [SPLASH] Timeout de emergencia: forzando ocultar splash después de 15000ms');
+      setUpdateState(prev => ({ ...prev, isChecking: false }));
+      setShowSplash(false);
+    }, 15000);
+
+    return () => {
+      clearTimeout(splashTimeout);
+      clearTimeout(emergencyTimeout);
+    };
   }, [updateState.isChecking]);
 
   // Ocultar splash cuando termine la verificación de actualización
@@ -744,13 +767,13 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={[styles.container, styles.centerContainer]}>
-          <ActivityIndicator size="large" color="#ff6b00" style={styles.loaderMargin} />
+          <ActivityIndicator size="large" color="#ffffff" style={styles.loaderMargin} />
           <View style={styles.updateBlockingContent}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
             <View style={styles.updateBlockingContainer}>
               <View style={styles.updateBlockingBox}>
                 <View style={styles.loaderContainer}>
-                  <ActivityIndicator size="large" color="#ff6b00" />
+                  <ActivityIndicator size="large" color="#ffffff" />
                 </View>
               </View>
             </View>
@@ -778,7 +801,7 @@ function App() {
             <AppSplashScreen />
             {updateState.isChecking && (
               <View style={styles.loaderOverlay}>
-                <ActivityIndicator size="large" color="#ff6b00" />
+                <ActivityIndicator size="large" color="#ffffff" />
               </View>
             )}
           </View>

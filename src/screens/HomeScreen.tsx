@@ -372,7 +372,7 @@ export default function HomeScreen({
                 disabled={isExiting}
                 focusable={false}
                 thumbColor={shouldLogoutOnExit ? '#ffffff' : '#d8d8d8'}
-                trackColor={{ false: '#555', true: '#ff7a1a' }}
+                trackColor={{ false: '#555', true: '#0082c5' }}
               />
               <Text style={styles.logoutSwitchText}>Cerrar sesión</Text>
             </Pressable>
@@ -466,14 +466,15 @@ centerMessageContainer: {
     marginTop: 24,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#333',
+    backgroundColor: 'rgba(0, 130, 197, 0.16)',
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: '#0082c5',
   },
   retryButtonFocused: {
-    borderColor: '#ff7a1a',
-    backgroundColor: '#444',
+    borderColor: '#ffffff',
+    backgroundColor: '#0f4c81',
+    transform: [{ scale: 1.03 }],
   },
   retryButtonText: {
     color: '#fff',
@@ -609,13 +610,14 @@ centerMessageContainer: {
   },
 
   sortButtonSelected: {
-    backgroundColor: '#f0f0f0',
-    borderColor: '#f0f0f0',
+    backgroundColor: 'rgba(0, 130, 197, 0.2)',
+    borderColor: '#0082c5',
   },
 
   sortButtonFocused: {
     borderColor: '#ffffff',
-    transform: [{ scale: 1.08 }],
+    backgroundColor: '#1f3e58',
+    transform: [{ scale: 1.04 }],
   },
 
   sortButtonDisabled: {
@@ -635,7 +637,7 @@ centerMessageContainer: {
   },
 
   sortButtonTextSelected: {
-    color: '#111',
+    color: '#ffffff',
   },
 
   sortButtonTextDisabled: {
@@ -703,31 +705,31 @@ centerMessageContainer: {
   },
 
   exitButton: {
-  backgroundColor: '#5a678d22',
-  borderColor: '#0082c5',          // Verde como borde de contraste
+  backgroundColor: 'rgba(0, 130, 197, 0.16)',
+  borderColor: '#0082c5',
 },
 
 cancelButton: {
-  backgroundColor: '#5a678d22',
-  borderColor: '#0082c5',          // Verde sólido para el borde
+  backgroundColor: 'rgba(0, 130, 197, 0.08)',
+  borderColor: '#0082c5',
 },
 
 exitDialogButtonText: {
-  color: '#aaa',                // Blanco (se permite porque es texto sobre azul)
+  color: '#ffffff',
   fontSize: 17,
   fontWeight: '800',
 },
 
 cancelButtonText: {
-  color: '#aaa',               // Azul para el texto del botón cancelar
+  color: '#ffffff',
   fontSize: 17,
   fontWeight: '800',
 },
 
 dialogControlFocused: {
-  borderColor: '#0082c5',
-    backgroundColor: '#222',
-    transform: [{ scale: 1.04 }],
+  borderColor: '#ffffff',
+  backgroundColor: '#1f3e58',
+  transform: [{ scale: 1.04 }],
 },
 
   dialogControlPressed: {
