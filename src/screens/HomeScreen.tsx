@@ -175,13 +175,13 @@ export default function HomeScreen({
     setIsExitDialogVisible(false);
   };
 
-  const handleConfirmExit = async () => {
+  const handleConfirmExit = () => {
     if (isExiting) {
       return;
     }
 
     setIsExiting(true);
-    await onRequestExit(shouldLogoutOnExit);
+    void onRequestExit(shouldLogoutOnExit);
   };
 
   return (

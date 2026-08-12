@@ -91,6 +91,57 @@ const wait = (milliseconds: number) =>
 const getCanceledAccountMessage = (reason: string) =>
   `${ADMIN_CANCELED_ACCOUNT_MESSAGE} ${reason.trim() || 'Sin motivo especificado'}`;
 
+export const performAppExit = async ({
+  shouldLogout,
+  authToken,
+  logoutFn = logout,
+  clearLocalSessionDataFn = clearLocalSessionData,
+  exitAppFn = () => BackHandler.exitApp(),
+  onResetState,
+  logoutTimeoutMs = 1500,
+}: {
+  shouldLogout: boolean;
+  authToken?: string | null;
+  logoutFn?: (token: string) => Promise<void>;
+  clearLocalSessionDataFn?: () => Promise<void>;
+  exitAppFn?: () => void;
+  onResetState?: () => void;
+  logoutTimeoutMs?: number;
+}): Promise<void> => {
+  const timeoutPromise = (ms: number) =>
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error('Logout timeout'));
+      }, ms);
+    });
+
+  try {
+    if (shouldLogout && authToken) {
+      await Promise.race([
+        logoutFn(authToken),
+        timeoutPromise(logoutTimeoutMs),
+      ]);
+    }
+  } catch (error) {
+    console.warn('No se pudo cerrar sesión antes de salir:', error);
+  }
+
+  try {
+    if (shouldLogout) {
+      await Promise.race([
+        clearLocalSessionDataFn(),
+        timeoutPromise(Math.min(logoutTimeoutMs, 800)),
+      ]);
+    }
+  } catch (error) {
+    console.warn('No se pudo limpiar sesión local al salir:', error);
+  }
+
+  onResetState?.();
+  exitAppFn();
+};
+
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [showSplash, setShowSplash] = useState(true);
@@ -741,23 +792,24 @@ function App() {
 
   const handleRequestExit = useCallback(
     async (shouldLogout: boolean) => {
-      if (shouldLogout) {
-        const token = authSession?.token;
-
-        if (token) {
-          await logout(token);
-        }
-
-        await clearLocalSessionData();
+      const resetState = () => {
         setAuthSession(null);
         setActiveChannel(null);
         setChannels([]);
         setFavoriteIds([]);
+        setSessionLimitModalVisible(false);
         channelsUpdatedAtRef.current = null;
         hasChannelsRef.current = false;
-      }
+      };
 
-      BackHandler.exitApp();
+      await performAppExit({
+        shouldLogout,
+        authToken: authSession?.token,
+        logoutFn: logout,
+        clearLocalSessionDataFn: clearLocalSessionData,
+        exitAppFn: () => BackHandler.exitApp(),
+        onResetState: resetState,
+      });
     },
     [authSession?.token],
   );
