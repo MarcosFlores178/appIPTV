@@ -115,6 +115,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               maxBufferMs: 34000,
               bufferForPlaybackMs: 2000,
               bufferForPlaybackAfterRebufferMs: 8000,
+              cacheSizeMB: 0,
             },
           }}
           style={styles.video}
