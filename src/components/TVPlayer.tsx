@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  BackHandler,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Video, { ResizeMode, type OnBufferData } from 'react-native-video';
+import useWatchdog from '../hooks/useWatchdog';
 import { IPTVChannel } from '../types/iptv';
 
 interface TVPlayerProps {
@@ -11,17 +18,21 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [startupTimeoutMessage, setStartupTimeoutMessage] = useState<string | null>(null);
+  const [startupTimeoutMessage, setStartupTimeoutMessage] = useState<
+    string | null
+  >(null);
   const [showChannelName, setShowChannelName] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [playerKey, setPlayerKey] = useState(0);
-  
-  const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const channelNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxRetries = 5;
-  const START_READY_TIMEOUT_MS = 20000;
+  const START_READY_TIMEOUT_MS = 12000;
 
   useEffect(() => {
     setIsBuffering(false);
@@ -29,7 +40,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     setShowChannelName(false);
     setHasPlaybackStarted(false);
     setRetryCount(0);
-    
+
     const clearAllTimers = () => {
       if (channelNameTimerRef.current) {
         clearTimeout(channelNameTimerRef.current);
@@ -59,7 +70,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     }
 
     const backAction = () => {
-      console.log('Usuario abortó la reconexión. Limpiando timer de reintento...');
+      console.log(
+        'Usuario abortó la reconexión. Limpiando timer de reintento...',
+      );
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
@@ -91,13 +104,51 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
         setShowChannelName(false);
         channelNameTimerRef.current = null;
       }, 3000);
-
     }
   }, [hasPlaybackStarted]);
 
   const handleBuffer = ({ isBuffering: nextIsBuffering }: OnBufferData) => {
     setIsBuffering(nextIsBuffering);
   };
+
+  const handlePlaybackFailure = (message?: string) => {
+    if (retryCount < maxRetries) {
+      const nextRetry = retryCount + 1;
+      const delay = Math.pow(2, retryCount) * 1000;
+
+      console.log(
+        `Playback failure, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`,
+      );
+
+      setRetryCount(nextRetry);
+
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+
+      retryTimerRef.current = setTimeout(() => {
+        setPlayerKey(prev => prev + 1);
+        retryTimerRef.current = null;
+      }, delay);
+
+      return;
+    }
+
+    setIsBuffering(false);
+    setErrorMessage(message || 'No se pudo reproducir este stream.');
+  };
+
+  useWatchdog({
+    isBuffering,
+    hasPlaybackStarted,
+    streamKey: `${channel.id}-${playerKey}`,
+    onStall: () => {
+      console.warn('Buffering prolongado detectado: reiniciando stream');
+      handlePlaybackFailure(
+        'La reproducción se detuvo por falta de datos. Reconectando...',
+      );
+    },
+  });
 
   return (
     <View style={styles.playerShell}>
@@ -108,7 +159,8 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
             uri: channel.url,
             // 🔽 AQUÍ AÑADIMOS EL USER AGENT AMIGABLE 🔽
             headers: {
-              'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
             },
             bufferConfig: {
               minBufferMs: 26000,
@@ -121,7 +173,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
           controls={false}
-          focusable={false} 
+          focusable={false}
           paused={false}
           playInBackground={false}
           playWhenInactive={false}
@@ -136,10 +188,18 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
             }
 
             readyTimeoutRef.current = setTimeout(() => {
-              console.log('Playback start timeout: reiniciando stream para desbloquear reproductor');
-              setStartupTimeoutMessage('Reintentando canal por falta de respuesta desde el servidor.');
-              setPlayerKey(prev => prev + 1);
               readyTimeoutRef.current = null;
+              console.log(
+                'Playback start timeout: derivando a flujo centralizado de reintento',
+              );
+              setStartupTimeoutMessage(
+                'Reintentando canal por falta de respuesta desde el servidor.',
+              );
+
+              // En lugar de setPlayerKey directo, llama a la función central:
+              handlePlaybackFailure(
+                'El canal no respondió dentro del tiempo esperado.',
+              );
             }, START_READY_TIMEOUT_MS);
           }}
           onLoad={() => {
@@ -167,35 +227,20 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               readyTimeoutRef.current = null;
             }
 
-            if (retryCount < maxRetries) {
-              const nextRetry = retryCount + 1;
-              const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
-              
-              console.log(`Playback error, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`);
-              
-              setRetryCount(nextRetry);
-              
-              if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-              retryTimerRef.current = setTimeout(() => {
-                setPlayerKey(prev => prev + 1);
-                retryTimerRef.current = null;
-              }, delay);
-              
-              return;
-            }
-
-            setIsBuffering(false);
-            setErrorMessage(
+            handlePlaybackFailure(
               event.error?.errorString ||
-              event.error?.localizedDescription ||
-              'No se pudo reproducir este stream.',
+                event.error?.localizedDescription ||
+                'No se pudo reproducir este stream.',
             );
           }}
         />
 
         {/* Solo mostramos el overlay si hay error o si se quedó sin buffer (isBuffering nativo) */}
-        {(isInitialLoad || isBuffering || errorMessage || startupTimeoutMessage) && (
-          <View style={styles.statusOverlay} pointerEvents="none"> 
+        {(isInitialLoad ||
+          isBuffering ||
+          errorMessage ||
+          startupTimeoutMessage) && (
+          <View style={styles.statusOverlay} pointerEvents="none">
             {errorMessage ? (
               <>
                 <Text style={styles.errorTitle}>No se pudo abrir el canal</Text>
@@ -297,6 +342,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 640,
   },
-
-  
 });
