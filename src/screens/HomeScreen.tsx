@@ -315,7 +315,7 @@ export default function HomeScreen({
     {/* REEMPLAZAR EL <ChannelGrid /> POR ESTO: */}
       {channelsLoading ? (
         <View style={styles.centerMessageContainer}>
-          <ActivityIndicator size="large" color="#ff7a1a" />
+          <ActivityIndicator size="large" color="#ffffff" />
           <Text style={styles.messageText}>Cargando canales...</Text>
         </View>
       ) : channelsError ? (

@@ -31,8 +31,8 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   );
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const maxRetries = 5;
-  const START_READY_TIMEOUT_MS = 12000;
+  const maxRetries = 3;
+  const START_READY_TIMEOUT_MS = 18000;
 
   useEffect(() => {
     setIsBuffering(false);
@@ -114,7 +114,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const handlePlaybackFailure = (message?: string) => {
     if (retryCount < maxRetries) {
       const nextRetry = retryCount + 1;
-      const delay = Math.pow(2, retryCount) * 1000;
+      
+      // ESPERA CONSTANTE: 3 segundos fijos
+      const delay = 3000; 
 
       console.log(
         `Playback failure, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`,
@@ -166,8 +168,11 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               minBufferMs: 26000,
               maxBufferMs: 34000,
               bufferForPlaybackMs: 2000,
-              bufferForPlaybackAfterRebufferMs: 8000,
+              bufferForPlaybackAfterRebufferMs: 4000,
               cacheSizeMB: 0,
+              live: {
+                targetOffsetMs: 20000, // Nos paramos a 20 segundos del vivo. ¡Escudo de titanio!
+              },
             },
           }}
           style={styles.video}
