@@ -4,7 +4,13 @@ export interface UseWatchdogOptions {
   isBuffering: boolean;
   hasPlaybackStarted: boolean;
   onStall: () => void;
+  // NUEVO: referencia a currentTime del player. Si se pasa, el watchdog
+  // usa avance de currentTime como criterio en lugar de solo isBuffering.
+  currentTimeRef?: React.MutableRefObject<number>;
+  // Umbral cuando el video está en buffering y currentTime no avanza.
   bufferingTimeoutMs?: number;
+  // Umbral cuando el video NO está en buffering pero currentTime no avanza.
+  frozenTimeoutMs?: number;
   enabled?: boolean;
   streamKey?: string | number;
 }
@@ -14,71 +20,97 @@ export interface UseWatchdogResult {
   reset: () => void;
 }
 
-const DEFAULT_BUFFERING_TIMEOUT_MS = 8000;
+const DEFAULT_BUFFERING_TIMEOUT_MS = 15000;   // antes 8000
+const DEFAULT_FROZEN_TIMEOUT_MS = 20000;
 
 export function useWatchdog({
   isBuffering,
   hasPlaybackStarted,
   onStall,
+  currentTimeRef,
   bufferingTimeoutMs = DEFAULT_BUFFERING_TIMEOUT_MS,
+  frozenTimeoutMs = DEFAULT_FROZEN_TIMEOUT_MS,
   enabled = true,
   streamKey,
 }: UseWatchdogOptions): UseWatchdogResult {
   const [isStalled, setIsStalled] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stallReportedRef = useRef(false);
   const onStallRef = useRef(onStall);
+
+  // Refs para la lógica basada en currentTime
+  const lastTimeRef = useRef<number>(0);
+  const frozenSinceRef = useRef<number | null>(null);
 
   useEffect(() => {
     onStallRef.current = onStall;
   }, [onStall]);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
   const reset = useCallback(() => {
-    clearTimer();
     stallReportedRef.current = false;
+    frozenSinceRef.current = null;
+    lastTimeRef.current = 0;
     setIsStalled(false);
-  }, [clearTimer]);
+  }, []);
 
   useEffect(() => {
     reset();
   }, [reset, streamKey]);
 
   useEffect(() => {
-    clearTimer();
-
-    if (!enabled || !hasPlaybackStarted || !isBuffering || stallReportedRef.current) {
-      if (!isBuffering) {
-        stallReportedRef.current = false;
-        setIsStalled(false);
-      }
+    if (!enabled || !hasPlaybackStarted || stallReportedRef.current) {
       return;
     }
 
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      stallReportedRef.current = true;
-      setIsStalled(true);
-      onStallRef.current();
-    }, bufferingTimeoutMs);
+    // MODO 1: sin currentTimeRef → comportamiento clásico (basado en isBuffering)
+    if (!currentTimeRef) {
+      if (!isBuffering) return;
+      const t = setTimeout(() => {
+        stallReportedRef.current = true;
+        setIsStalled(true);
+        onStallRef.current();
+      }, bufferingTimeoutMs);
+      return () => clearTimeout(t);
+    }
 
-    return clearTimer;
+    // MODO 2: con currentTimeRef → basado en avance real de currentTime
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const currentTime = currentTimeRef.current;
+
+      if (currentTime > lastTimeRef.current) {
+        lastTimeRef.current = currentTime;
+        frozenSinceRef.current = null;
+        return;
+      }
+
+      if (frozenSinceRef.current === null) {
+        frozenSinceRef.current = now;
+        console.log(`[Watchdog] Congelamiento detectado. currentTime=${currentTime.toFixed(2)} threshold=${isBuffering ? bufferingTimeoutMs : frozenTimeoutMs}ms`);
+        return;
+      }
+
+      const frozenFor = now - frozenSinceRef.current;
+      const threshold = isBuffering ? bufferingTimeoutMs : frozenTimeoutMs;
+
+      if (frozenFor >= threshold) {
+        console.warn(`[Watchdog] STALL CONFIRMADO. currentTime=${currentTime.toFixed(2)} congelado por ${frozenFor}ms`);
+        stallReportedRef.current = true;
+        setIsStalled(true);
+        onStallRef.current();
+        frozenSinceRef.current = null;
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
   }, [
     bufferingTimeoutMs,
-    clearTimer,
+    currentTimeRef,
     enabled,
+    frozenTimeoutMs,
     hasPlaybackStarted,
     isBuffering,
     streamKey,
   ]);
-
-  useEffect(() => clearTimer, [clearTimer]);
 
   return { isStalled, reset };
 }

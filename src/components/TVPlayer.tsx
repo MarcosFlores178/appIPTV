@@ -31,6 +31,8 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   );
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentTimeRef = useRef<number>(0);
+  const progressLogCountRef = useRef(0);
   const maxRetries = 3;
   const START_READY_TIMEOUT_MS = 18000;
 
@@ -40,6 +42,7 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     setShowChannelName(false);
     setHasPlaybackStarted(false);
     setRetryCount(0);
+    currentTimeRef.current = 0; // 👈 nuevo
 
     const clearAllTimers = () => {
       if (channelNameTimerRef.current) {
@@ -114,9 +117,9 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
   const handlePlaybackFailure = (message?: string) => {
     if (retryCount < maxRetries) {
       const nextRetry = retryCount + 1;
-      
+
       // ESPERA CONSTANTE: 3 segundos fijos
-      const delay = 3000; 
+      const delay = 3000;
 
       console.log(
         `Playback failure, retrying in ${delay}ms (${nextRetry}/${maxRetries})...`,
@@ -144,8 +147,11 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
     isBuffering,
     hasPlaybackStarted,
     streamKey: `${channel.id}-${playerKey}`,
+    currentTimeRef, // 👈 nuevo
+    bufferingTimeoutMs: 15000, // opcional
+    frozenTimeoutMs: 20000, // opcional
     onStall: () => {
-      console.warn('Buffering prolongado detectado: reiniciando stream');
+      console.warn('Stall confirmado: reiniciando stream');
       handlePlaybackFailure(
         'La reproducción se detuvo por falta de datos. Reconectando...',
       );
@@ -183,6 +189,16 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
+          progressUpdateInterval={1000} // 👈 nuevo
+          onProgress={({ currentTime }) => {
+            // 👈 nuevo
+            currentTimeRef.current = currentTime;
+             progressLogCountRef.current += 1;
+  // Loguear solo cada 10 disparos (cada 10 segundos con interval 1000)
+  if (progressLogCountRef.current % 10 === 0) {
+    console.log(`[TVPlayer] onProgress #${progressLogCountRef.current} currentTime=${currentTime.toFixed(2)}`);
+  }
+          }}
           onLoadStart={() => {
             setIsInitialLoad(true);
             setErrorMessage(null);
@@ -232,6 +248,25 @@ export default function TVPlayer({ channel }: TVPlayerProps) {
               readyTimeoutRef.current = null;
             }
 
+            const errorStr = (event.error?.errorString || '').toLowerCase();
+            const isManifestError =
+              errorStr.includes('manifest') ||
+              errorStr.includes('playlist') ||
+              errorStr.includes('404') ||
+              errorStr.includes('410');
+
+            // Si el reproductor ya estaba reproduciendo, darle margen a ExoPlayer para reintentar
+            if (hasPlaybackStarted && !isManifestError) {
+              console.log(
+                'Error recuperable, dejando que ExoPlayer reintente:',
+                errorStr,
+              );
+              // No setPlayerKey. Solo marcamos buffering para el overlay.
+              setIsBuffering(true);
+              return;
+            }
+
+            // Errores fatales o el reproductor nunca comenzó: activar reintento
             handlePlaybackFailure(
               event.error?.errorString ||
                 event.error?.localizedDescription ||
