@@ -20,7 +20,7 @@ export interface UseWatchdogResult {
   reset: () => void;
 }
 
-const DEFAULT_BUFFERING_TIMEOUT_MS = 15000;   // antes 8000
+const DEFAULT_BUFFERING_TIMEOUT_MS = 15000; // antes 8000
 const DEFAULT_FROZEN_TIMEOUT_MS = 20000;
 
 export function useWatchdog({
@@ -77,7 +77,16 @@ export function useWatchdog({
       const now = Date.now();
       const currentTime = currentTimeRef.current;
 
-      if (currentTime > lastTimeRef.current) {
+      // 👇 FIX CRÍTICO: ignorar valores no positivos (fase de inicialización)
+      if (currentTime <= 0) {
+        // El reproductor no ha empezado a reproducir (o se reinició).
+        // No contar congelamiento. Resetear cualquier conteo previo.
+        lastTimeRef.current = currentTime;
+        frozenSinceRef.current = null;
+        return;
+      }
+
+      if (currentTime !== lastTimeRef.current) {
         lastTimeRef.current = currentTime;
         frozenSinceRef.current = null;
         return;
@@ -85,7 +94,11 @@ export function useWatchdog({
 
       if (frozenSinceRef.current === null) {
         frozenSinceRef.current = now;
-        console.log(`[Watchdog] Congelamiento detectado. currentTime=${currentTime.toFixed(2)} threshold=${isBuffering ? bufferingTimeoutMs : frozenTimeoutMs}ms`);
+        console.log(
+          `[Watchdog] Congelamiento detectado. currentTime=${currentTime.toFixed(
+            2,
+          )} threshold=${isBuffering ? bufferingTimeoutMs : frozenTimeoutMs}ms`,
+        );
         return;
       }
 
@@ -93,7 +106,11 @@ export function useWatchdog({
       const threshold = isBuffering ? bufferingTimeoutMs : frozenTimeoutMs;
 
       if (frozenFor >= threshold) {
-        console.warn(`[Watchdog] STALL CONFIRMADO. currentTime=${currentTime.toFixed(2)} congelado por ${frozenFor}ms`);
+        console.warn(
+          `[Watchdog] STALL CONFIRMADO. currentTime=${currentTime.toFixed(
+            2,
+          )} congelado por ${frozenFor}ms`,
+        );
         stallReportedRef.current = true;
         setIsStalled(true);
         onStallRef.current();
