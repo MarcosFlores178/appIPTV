@@ -41,7 +41,7 @@ export default function SessionLimitModal({
     }
 
     setSelectedSessionId(prev =>
-      prev && sessions.some(session => session.id === prev) ? prev : sessions[0].id,
+      prev && sessions.some(session => session.id === prev) ? prev : null,
     );
   }, [visible, sessions]);
 
@@ -73,10 +73,6 @@ export default function SessionLimitModal({
     }
   };
 
-  const handleSessionFocus = (sessionId: string) => {
-    setSelectedSessionId(sessionId);
-  };
-
   const renderSession = ({ item }: { item: FlatListSession }) => {
     const isSelected = selectedSessionId === item.id;
     const isFirst = sessions[0]?.id === item.id;
@@ -85,8 +81,7 @@ export default function SessionLimitModal({
       <Pressable
         ref={isFirst ? firstSessionRef : undefined}
         hasTVPreferredFocus={isFirst}
-        onPress={() => handleSessionFocus(item.id)}
-        onFocus={() => handleSessionFocus(item.id)}
+        onPress={() => setSelectedSessionId(item.id)}
         style={({ focused }) => [
           styles.sessionItem,
           isSelected && styles.sessionItemSelected,
