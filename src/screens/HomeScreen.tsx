@@ -269,14 +269,17 @@ export default function HomeScreen({
                 pressed && styles.sortButtonPressed,
               ]}
             >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sortMode === 'name' && styles.sortButtonTextSelected,
-                ]}
-              >
-                Ordenar por nombre
-              </Text>
+              {({ focused }) => (
+                <Text
+                  style={[
+                    styles.sortButtonText,
+                    sortMode === 'name' && styles.sortButtonTextSelected,
+                    focused && styles.sortButtonTextFocused,
+                  ]}
+                >
+                  Ordenar por nombre
+                </Text>
+              )}
             </Pressable>
 
             <Pressable
@@ -292,15 +295,18 @@ export default function HomeScreen({
                 pressed && styles.sortButtonPressed,
               ]}
             >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sortMode === 'group' && styles.sortButtonTextSelected,
-                  !isCategorySortEnabled && styles.sortButtonTextDisabled,
-                ]}
-              >
-                Ordenar por categoria
-              </Text>
+              {({ focused }) => (
+                <Text
+                  style={[
+                    styles.sortButtonText,
+                    sortMode === 'group' && styles.sortButtonTextSelected,
+                    !isCategorySortEnabled && styles.sortButtonTextDisabled,
+                    focused && styles.sortButtonTextFocused,
+                  ]}
+                >
+                  Ordenar por categoria
+                </Text>
+              )}
             </Pressable>
           </View>
 
@@ -316,12 +322,22 @@ export default function HomeScreen({
             {searchQuery.trim() ? (
               <Pressable
                 onPress={() => setSearchQuery('')}
-                style={({ pressed }) => [
+                style={({ pressed, focused }) => [
                   styles.clearButton,
+                  focused && styles.clearButtonFocused,
                   pressed && styles.clearButtonPressed,
                 ]}
               >
-                <Text style={styles.clearButtonText}>Limpiar</Text>
+                {({ focused }) => (
+                  <Text
+                    style={[
+                      styles.clearButtonText,
+                      focused && styles.clearButtonTextFocused,
+                    ]}
+                  >
+                    Limpiar
+                  </Text>
+                )}
               </Pressable>
             ) : null}
           </View>
@@ -346,7 +362,16 @@ export default function HomeScreen({
               focused && styles.retryButtonFocused
             ]}
           >
-            <Text style={styles.retryButtonText}>Reintentar</Text>
+            {({ focused }) => (
+              <Text
+                style={[
+                  styles.retryButtonText,
+                  focused && styles.retryButtonTextFocused,
+                ]}
+              >
+                Reintentar
+              </Text>
+            )}
           </Pressable>
         </View>
       ) : (
@@ -382,15 +407,26 @@ export default function HomeScreen({
                 isExiting && styles.dialogControlDisabled,
               ]}
             >
-              <Switch
-                value={shouldLogoutOnExit}
-                onValueChange={setShouldLogoutOnExit}
-                disabled={isExiting}
-                focusable={false}
-                thumbColor={shouldLogoutOnExit ? '#ffffff' : '#d8d8d8'}
-                trackColor={{ false: '#555', true: '#0082c5' }}
-              />
-              <Text style={styles.logoutSwitchText}>Cerrar sesión</Text>
+              {({ focused }) => (
+                <>
+                  <Switch
+                    value={shouldLogoutOnExit}
+                    onValueChange={setShouldLogoutOnExit}
+                    disabled={isExiting}
+                    focusable={false}
+                    thumbColor={shouldLogoutOnExit ? '#ffffff' : '#d8d8d8'}
+                    trackColor={{ false: '#555', true: '#0082c5' }}
+                  />
+                  <Text
+                    style={[
+                      styles.logoutSwitchText,
+                      focused && styles.dialogControlFocusedText,
+                    ]}
+                  >
+                    Cerrar sesión
+                  </Text>
+                </>
+              )}
             </Pressable>
 
             <View style={styles.exitDialogActions}>
@@ -405,9 +441,16 @@ export default function HomeScreen({
                   isExiting && styles.dialogControlDisabled,
                 ]}
               >
-                <Text style={styles.exitDialogButtonText}>
-                  {isExiting ? 'Saliendo...' : 'Salir'}
-                </Text>
+                {({ focused }) => (
+                  <Text
+                    style={[
+                      styles.exitDialogButtonText,
+                      focused && styles.dialogControlFocusedText,
+                    ]}
+                  >
+                    {isExiting ? 'Saliendo...' : 'Salir'}
+                  </Text>
+                )}
               </Pressable>
 
               <Pressable
@@ -422,7 +465,16 @@ export default function HomeScreen({
                   isExiting && styles.dialogControlDisabled,
                 ]}
               >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                {({ focused }) => (
+                  <Text
+                    style={[
+                      styles.cancelButtonText,
+                      focused && styles.dialogControlFocusedText,
+                    ]}
+                  >
+                    Cancelar
+                  </Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -488,9 +540,12 @@ centerMessageContainer: {
     borderColor: '#0082c5',
   },
   retryButtonFocused: {
-    borderColor: '#ffffff',
-    backgroundColor: '#0f4c81',
+    borderColor: '#0082c5',
+    backgroundColor: '#ffffff',
     transform: [{ scale: 1.03 }],
+  },
+  retryButtonTextFocused: {
+    color: '#111111',
   },
   retryButtonText: {
     color: '#fff',
@@ -597,6 +652,12 @@ centerMessageContainer: {
     justifyContent: 'center',
   },
 
+  clearButtonFocused: {
+    borderColor: '#0082c5',
+    backgroundColor: '#ffffff',
+    transform: [{ scale: 1.04 }],
+  },
+
   clearButtonPressed: {
     opacity: 0.82,
   },
@@ -605,6 +666,10 @@ centerMessageContainer: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  clearButtonTextFocused: {
+    color: '#111111',
   },
 
   sortRow: {
@@ -631,8 +696,8 @@ centerMessageContainer: {
   },
 
   sortButtonFocused: {
-    borderColor: '#ffffff',
-    backgroundColor: '#1f3e58',
+    borderColor: '#0082c5',
+    backgroundColor: '#ffffff',
     transform: [{ scale: 1.04 }],
   },
 
@@ -654,6 +719,10 @@ centerMessageContainer: {
 
   sortButtonTextSelected: {
     color: '#ffffff',
+  },
+
+  sortButtonTextFocused: {
+    color: '#111111',
   },
 
   sortButtonTextDisabled: {
@@ -743,10 +812,14 @@ cancelButtonText: {
 },
 
 dialogControlFocused: {
-  borderColor: '#ffffff',
-  backgroundColor: '#1f3e58',
+  borderColor: '#0082c5',
+  backgroundColor: '#ffffff',
   transform: [{ scale: 1.04 }],
 },
+
+  dialogControlFocusedText: {
+    color: '#111111',
+  },
 
   dialogControlPressed: {
     opacity: 0.86,
