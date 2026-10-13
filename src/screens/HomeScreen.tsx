@@ -790,7 +790,7 @@ centerMessageContainer: {
   },
 
   exitButton: {
-  backgroundColor: 'rgba(0, 130, 197, 0.16)',
+  backgroundColor: 'rgba(0, 130, 197, 0.08)',
   borderColor: '#0082c5',
 },
 
