@@ -1,9 +1,6 @@
 import React from 'react';
-import {
-  ImageBackground,
-  SafeAreaView,
-  StyleSheet,
-} from 'react-native';
+import { ImageBackground, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const splashBackground = require('../../assets/branding/splash-image.png');
 
