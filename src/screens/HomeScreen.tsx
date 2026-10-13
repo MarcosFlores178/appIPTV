@@ -42,6 +42,22 @@ interface HomeScreenProps {
 
 const appLogo = require('../../assets/branding/app-logo.png');
 
+const formatDateTime = () => {
+  const now = new Date();
+  const weekday = now.toLocaleDateString('es-AR', { weekday: 'long' });
+  const dayAndMonth = now.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+  const time = now.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  return `${weekday} ${dayAndMonth} · ${time}`;
+};
+
 export default function HomeScreen({
   channels: allChannels,
   channelsLoading,   // <-- NUEVO
@@ -63,13 +79,7 @@ export default function HomeScreen({
   const [isExiting, setIsExiting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const isCategorySortEnabled = selectedCategory === 'Todos';
-  const [currentTime, setCurrentTime] = useState(() =>
-    new Date().toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }),
-  );
+  const [currentDateTime, setCurrentDateTime] = useState(formatDateTime);
 
   useEffect(() => {
     const hydrateScreen = async () => {
@@ -98,17 +108,23 @@ export default function HomeScreen({
   }, [allChannels, selectedChannel]);
 
   useEffect(() => {
-    const updateTime = () =>
-      setCurrentTime(
-        new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }),
-      );
+    const now = new Date();
+    const msToNextMinute =
+      (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const timeout = setTimeout(() => {
+      setCurrentDateTime(formatDateTime());
+      interval = setInterval(() => {
+        setCurrentDateTime(formatDateTime());
+      }, 60000);
+    }, msToNextMinute);
 
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeout);
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -189,7 +205,7 @@ export default function HomeScreen({
       <View style={styles.hero}>
         <View style={styles.brandRow}>
           <Image source={appLogo} resizeMode="contain" resizeMethod="resize" style={styles.brandLogo} />
-          <Text style={styles.clock}>{currentTime}</Text>
+          <Text style={styles.clock}>{currentDateTime}</Text>
         </View>
         {/* <Text style={styles.subtitle}>
           Navega canales en una grilla simple para TV y retoma rapido donde lo
